@@ -293,7 +293,47 @@ LLM_CONFIG = {
 
 ---
 
-### 2.6 Style / Fine-Tuning Pipeline
+### 2.6 Whisper Transcription Service (Phase 4)
+
+**Responsibility:** Transcribe videos without YouTube subtitles and manage subtitle uploads.
+
+**Problem Solved:**
+- YouTube only added Persian ASR around August 2023
+- Videos uploaded before that date have no auto-generated subtitles
+- This service fills that gap using OpenAI Whisper
+
+**Technology:**
+- **OpenAI Whisper API** - Cloud-based, ~$0.006/minute
+- **Local Whisper** (alternative) - Free, requires ffmpeg + ~1-6GB model
+
+**Functionality:**
+- Download audio from YouTube video (via yt-dlp)
+- Send to Whisper API for transcription
+- Store transcript in same format as YouTube subtitles
+- Upload to YouTube via YouTube Data API (captions.insert)
+
+**API Endpoints:**
+```
+POST /api/whisper/transcribe/{video_id}  # Transcribe video without subs
+POST /api/whisper/upload/{video_id}       # Upload transcript to YouTube
+GET  /api/whisper/status/{video_id}       # Check transcription status
+```
+
+**Data Flow:**
+```
+Video (no subs) → Download audio → Whisper API → Transcript
+                                              → Store in DB
+                                              → Upload to YouTube (optional)
+```
+
+**YouTube Caption Upload Requirements:**
+- OAuth 2.0 authentication (not just API key)
+- Scope: `youtube.force-ssl` for caption management
+- Can set: language, name, isDraft status
+
+---
+
+### 2.7 Style / Fine-Tuning Pipeline (Phase 3)
 
 **Responsibility:** Prepare data and manage fine-tuned models.
 
@@ -320,7 +360,7 @@ LLM_CONFIG = {
 
 ---
 
-### 2.7 Experimentation Layer
+### 2.8 Experimentation Layer
 
 **Responsibility:** Enable side-by-side model comparison.
 
@@ -347,7 +387,7 @@ Response: {
 
 ---
 
-### 2.8 User Interface
+### 2.9 User Interface
 
 **Responsibility:** Web interface for all user interactions.
 

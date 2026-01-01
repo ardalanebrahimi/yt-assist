@@ -11,7 +11,8 @@
       "Bash(./venv/Scripts/python.exe -m pip:*)",
       "Bash(./venv/Scripts/python:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: update youtube-transcript-api to new v1.2+ API\n\n- Use instance method api.list\\(\\) instead of class method list_transcripts\\(\\)\n- Access transcript data as object attributes \\(.text, .start, .duration\\)\n  instead of dictionary keys\n- Add Persian language variants to preferred languages\n- Improve transcript discovery with better fallback logic\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: update youtube-transcript-api to new v1.2+ API\n\n- Use instance method api.list\\(\\) instead of class method list_transcripts\\(\\)\n- Access transcript data as object attributes \\(.text, .start, .duration\\)\n  instead of dictionary keys\n- Add Persian language variants to preferred languages\n- Improve transcript discovery with better fallback logic\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
     ]
   }
 }

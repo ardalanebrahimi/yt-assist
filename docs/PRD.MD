@@ -167,7 +167,25 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
 - Evaluation support:
   - User can label output as "good style" / "off-style" (for future iterations).
 
-### Phase 4 – YouTube Assistant Workflows
+### Phase 4 – Whisper Transcription & Subtitle Management
+
+#### In Scope
+
+- Transcribe videos without YouTube auto-subtitles using OpenAI Whisper API
+- Support for videos uploaded before YouTube added Persian ASR (pre-Aug 2023)
+- Upload generated subtitles to YouTube via API
+- Review and edit subtitles before publishing
+- Option to improve/replace existing auto-generated subtitles with Whisper output
+
+#### Cost Estimate
+
+- OpenAI Whisper API: ~$0.006/minute
+- 30-minute video: ~$0.18
+- Alternative: Local Whisper (free, requires GPU for speed)
+
+---
+
+### Phase 5 – YouTube Assistant Workflows
 
 #### In Scope
 

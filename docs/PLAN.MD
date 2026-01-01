@@ -81,24 +81,46 @@
 
 ---
 
-## Milestone 4 – YouTube Assistant Workflows + Experiments
+## Milestone 4 – Whisper Transcription & Subtitle Management
 
-### 4.1 Implement "New Video Wizard" Flow
+### 4.1 Implement Whisper Integration
+
+- For videos without YouTube auto-subtitles (pre-Aug 2023)
+- Use OpenAI Whisper API (~$0.006/min) or local Whisper
+- Support Persian and English transcription
+
+### 4.2 Implement Subtitle Upload to YouTube
+
+- Use YouTube Data API to upload generated subtitles
+- Set language and publish status
+- Track which videos have been processed
+
+### 4.3 Implement Subtitle Quality Improvement
+
+- Compare Whisper output with existing auto-generated subtitles
+- Option to replace/improve existing subtitles
+- Review UI before publishing to YouTube
+
+---
+
+## Milestone 5 – YouTube Assistant Workflows + Experiments
+
+### 5.1 Implement "New Video Wizard" Flow
 
 - Input: idea or topic
 - Output: overlap check, angle suggestion, outline, script
 
-### 4.2 Implement "Series Planner"
+### 5.2 Implement "Series Planner"
 
 - Input: series topic
 - Output: current episodes summary, proposed next episodes
 
-### 4.3 Implement "Clip Finder"
+### 5.3 Implement "Clip Finder"
 
 - Input: video ID
 - Output: suggested clip ranges with timestamps and hooks
 
-### 4.4 Implement Multi-Model Comparison View
+### 5.4 Implement Multi-Model Comparison View
 
 - Side-by-side outputs from:
   - Your style model (+ RAG)
