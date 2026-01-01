@@ -5,13 +5,14 @@ Personal YouTube AI Assistant for managing and leveraging YouTube channel conten
 ## Features (Milestone 1)
 
 - Sync all videos and transcripts from your YouTube channel
-- View video library with sync status tracking
+- Modern React UI with video library and sync status tracking
 - Export transcripts as JSONL or ZIP files
 - Clean and store both raw and processed transcripts
 
 ## Requirements
 
 - Python 3.11+
+- Node.js 18+
 - YouTube Data API v3 key
 
 ## Setup
@@ -23,7 +24,7 @@ Personal YouTube AI Assistant for managing and leveraging YouTube channel conten
    python -m venv venv
    ```
 
-2. **Install dependencies:**
+2. **Install backend dependencies:**
    ```bash
    # Windows
    ./venv/Scripts/pip install -r requirements.txt
@@ -32,7 +33,14 @@ Personal YouTube AI Assistant for managing and leveraging YouTube channel conten
    venv/bin/pip install -r requirements.txt
    ```
 
-3. **Configure environment:**
+3. **Install frontend dependencies:**
+   ```bash
+   cd web
+   npm install
+   cd ..
+   ```
+
+4. **Configure environment:**
    ```bash
    cp .env.example .env
    ```
@@ -48,12 +56,13 @@ Personal YouTube AI Assistant for managing and leveraging YouTube channel conten
 ./venv/Scripts/uvicorn app.main:app --reload
 ```
 
-**Start the UI** (in a separate terminal):
+**Start the React UI** (in a separate terminal):
 ```bash
-./venv/Scripts/streamlit run ui/app.py
+cd web
+npm run dev
 ```
 
-Open http://localhost:8501 in your browser.
+Open http://localhost:5173 in your browser.
 
 ## API Endpoints
 
@@ -77,8 +86,12 @@ yt-assist/
 │   ├── api/routes/       # API endpoints
 │   ├── db/               # SQLAlchemy models
 │   └── services/         # Business logic
-├── ui/                   # Streamlit frontend
-│   └── pages/            # UI pages
+├── web/                  # React + shadcn/ui frontend
+│   ├── src/
+│   │   ├── components/ui/  # shadcn/ui components
+│   │   ├── lib/            # API client, utilities
+│   │   └── pages/          # Page components
+│   └── package.json
 ├── data/                 # SQLite database
 └── docs/                 # PRD and Architecture docs
 ```

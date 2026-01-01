@@ -10,7 +10,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              User Interface                                  │
-│                         (Streamlit Web App)                                  │
+│                    (React + TypeScript + shadcn/ui)                          │
 └─────────────────────────────────────────────────────────────────────────────┘
                                      │
                                      ▼
@@ -391,38 +391,67 @@ Response: {
 
 **Responsibility:** Web interface for all user interactions.
 
-**Technology:** Streamlit (Python-native, rapid development)
+**Technology:** React + TypeScript + Tailwind CSS + shadcn/ui
 
-**Why Streamlit:**
-- Single language (Python) for full stack
-- Built-in components for chat, file upload, data display
-- Easy to iterate during MVP phase
-- Can migrate to React/Next.js later if needed
+**Why React + shadcn/ui:**
+- Modern, responsive UI with polished components
+- Type-safe development with TypeScript
+- Highly customizable design system
+- Better user experience than Python-native solutions
+- Strong ecosystem for building complex UIs
+
+**Tech Stack:**
+- **Framework:** React 18 with Vite
+- **Styling:** Tailwind CSS v4
+- **Components:** shadcn/ui (Radix primitives)
+- **Icons:** Lucide React
+- **HTTP Client:** Axios
+- **State:** React hooks (useState, useEffect)
+
+**Project Structure:**
+```
+web/
+├── src/
+│   ├── components/ui/    # shadcn/ui components (Button, Card, Badge, Input)
+│   ├── lib/
+│   │   ├── api.ts        # API client with TypeScript types
+│   │   └── utils.ts      # Utility functions (cn, formatters)
+│   ├── pages/
+│   │   └── Library.tsx   # Main library page
+│   ├── App.tsx           # App entry point
+│   └── index.css         # Tailwind + CSS variables
+├── tailwind.config.js
+├── vite.config.ts
+└── package.json
+```
 
 **Views:**
 
-1. **Library View**
-   - Table of all videos with metadata
-   - Sync status indicators
-   - Filter by date, status, search
-   - Bulk sync actions
+1. **Library View** (Implemented)
+   - Stats cards (total, synced, pending, errors)
+   - Search bar with instant filtering
+   - Status filter buttons (All, Synced, Pending, Errors)
+   - Video cards with thumbnails, duration, and status badges
+   - Click-to-view detail modal with transcript preview
+   - Sync All button with loading state
+   - Export JSONL functionality
 
-2. **Chat / Q&A View**
+2. **Chat / Q&A View** (Future)
    - Chat interface
    - Toggle: "Use my style" on/off
    - Show referenced videos/timestamps in responses
 
-3. **Content Workflows**
+3. **Content Workflows** (Future)
    - New Video Wizard (multi-step form)
    - Series Planner
    - Clip Finder
 
-4. **Experiment View**
+4. **Experiment View** (Future)
    - Model selector (multi-select)
    - Side-by-side response display
    - Rating/feedback capture
 
-5. **Settings**
+5. **Settings** (Future)
    - API key management
    - Style description editor
    - Sync preferences
@@ -474,7 +503,7 @@ Response: {
 
 ```
 yt-assist/
-├── app/
+├── app/                        # FastAPI backend
 │   ├── __init__.py
 │   ├── main.py                 # FastAPI app entry
 │   ├── config.py               # Settings and env vars
@@ -483,23 +512,25 @@ yt-assist/
 │   │   ├── routes/
 │   │   │   ├── sync.py         # Ingestion endpoints
 │   │   │   ├── videos.py       # Video CRUD
-│   │   │   ├── rag.py          # Search endpoints
-│   │   │   ├── chat.py         # LLM chat endpoints
-│   │   │   └── experiment.py   # Comparison endpoints
+│   │   │   ├── export.py       # Export endpoints
+│   │   │   ├── rag.py          # Search endpoints (future)
+│   │   │   ├── chat.py         # LLM chat endpoints (future)
+│   │   │   └── experiment.py   # Comparison endpoints (future)
 │   │   └── deps.py             # Dependency injection
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── youtube.py          # YouTube API client
 │   │   ├── transcripts.py      # Subtitle fetching/cleaning
-│   │   ├── embeddings.py       # Chunking + embedding
-│   │   ├── rag.py              # RAG search logic
-│   │   ├── llm/
+│   │   ├── sync.py             # Sync orchestration
+│   │   ├── embeddings.py       # Chunking + embedding (future)
+│   │   ├── rag.py              # RAG search logic (future)
+│   │   ├── llm/                # LLM providers (future)
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py         # Provider interface
 │   │   │   ├── openai.py
 │   │   │   ├── anthropic.py
 │   │   │   └── orchestrator.py # Main LLM logic
-│   │   └── style.py            # Style prompt management
+│   │   └── style.py            # Style prompt management (future)
 │   ├── db/
 │   │   ├── __init__.py
 │   │   ├── database.py         # SQLAlchemy setup
@@ -508,19 +539,22 @@ yt-assist/
 │   └── core/
 │       ├── __init__.py
 │       └── exceptions.py
-├── ui/
-│   ├── app.py                  # Streamlit entry
-│   ├── pages/
-│   │   ├── 1_Library.py
-│   │   ├── 2_Chat.py
-│   │   ├── 3_Workflows.py
-│   │   ├── 4_Experiments.py
-│   │   └── 5_Settings.py
-│   └── components/
-│       └── ...
+├── web/                        # React + shadcn/ui frontend
+│   ├── src/
+│   │   ├── components/ui/      # shadcn/ui components
+│   │   ├── lib/
+│   │   │   ├── api.ts          # API client with TypeScript types
+│   │   │   └── utils.ts        # Utility functions
+│   │   ├── pages/
+│   │   │   └── Library.tsx     # Main library page
+│   │   ├── App.tsx             # App entry point
+│   │   └── index.css           # Tailwind + CSS variables
+│   ├── tailwind.config.js
+│   ├── vite.config.ts
+│   └── package.json
 ├── data/
 │   ├── yt_assist.db            # SQLite database
-│   └── chroma/                 # ChromaDB persistence
+│   └── chroma/                 # ChromaDB persistence (future)
 ├── tests/
 │   └── ...
 ├── docs/

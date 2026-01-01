@@ -12,9 +12,13 @@ YT-Assist is a personal YouTube AI assistant for managing channel content, synci
 
 ### Development Setup
 ```bash
+# Backend (Python)
 python -m venv venv
 ./venv/Scripts/pip install -r requirements.txt  # Windows
 # or: venv/bin/pip install -r requirements.txt  # Unix
+
+# Frontend (React)
+cd web && npm install
 ```
 
 ### Running the Application
@@ -22,25 +26,26 @@ python -m venv venv
 # Start FastAPI backend (port 8000)
 ./venv/Scripts/uvicorn app.main:app --reload
 
-# Start Streamlit UI (port 8501) - in separate terminal
-./venv/Scripts/streamlit run ui/app.py
+# Start React UI (port 5173) - in separate terminal
+cd web && npm run dev
 ```
 
 ### Linting
 ```bash
-./venv/Scripts/ruff check app/ ui/
-./venv/Scripts/black --check app/ ui/
+./venv/Scripts/ruff check app/
+./venv/Scripts/black --check app/
+cd web && npx tsc --noEmit  # TypeScript check
 ```
 
 ## Architecture
 
 ```
-UI (Streamlit) → FastAPI Backend → Services → SQLite DB
-     ↓                                ↓
-  ui/app.py                    app/services/
-  ui/pages/                    - youtube.py (YouTube Data API)
-                               - transcripts.py (subtitle fetching)
-                               - sync.py (orchestration)
+UI (React + shadcn/ui) → FastAPI Backend → Services → SQLite DB
+         ↓                                    ↓
+      web/src/                          app/services/
+      - pages/Library.tsx               - youtube.py (YouTube Data API)
+      - lib/api.ts                      - transcripts.py (subtitle fetching)
+      - components/ui/                  - sync.py (orchestration)
 ```
 
 ### Key Layers
@@ -48,7 +53,8 @@ UI (Streamlit) → FastAPI Backend → Services → SQLite DB
 - **`app/api/routes/`** - FastAPI endpoints: `/api/videos`, `/api/sync`, `/api/export`
 - **`app/services/`** - Business logic: YouTubeService, TranscriptService, SyncService
 - **`app/db/models.py`** - SQLAlchemy models: Video, Transcript
-- **`ui/pages/1_Library.py`** - Main Streamlit page for video management
+- **`web/src/pages/Library.tsx`** - Main React page for video management
+- **`web/src/lib/api.ts`** - API client with TypeScript types
 
 ### Data Flow for Sync Operation
 1. `SyncService.sync_all_videos()` calls `YouTubeService.get_channel_videos()`
