@@ -14,6 +14,9 @@ from youtube_transcript_api._errors import (
 
 logger = logging.getLogger(__name__)
 
+# Create a single instance of the API
+_youtube_transcript_api = YouTubeTranscriptApi()
+
 
 @dataclass
 class TranscriptSegment:
@@ -39,8 +42,8 @@ class TranscriptResult:
 class TranscriptService:
     """Service for fetching and processing YouTube transcripts."""
 
-    # Preferred languages in order of priority
-    PREFERRED_LANGUAGES = ["en", "fa", "en-US", "en-GB"]
+    # Preferred languages in order of priority (Persian variants + English)
+    PREFERRED_LANGUAGES = ["fa", "fa-IR", "per", "fas", "en", "en-US", "en-GB"]
 
     def fetch_transcript(self, video_id: str) -> Optional[TranscriptResult]:
         """
@@ -55,7 +58,7 @@ class TranscriptService:
             TranscriptResult or None if no transcript available
         """
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = _youtube_transcript_api.list(video_id)
 
             # Try to find a manually created transcript first
             transcript = self._find_best_transcript(transcript_list, manual_first=True)
@@ -67,12 +70,12 @@ class TranscriptService:
             # Fetch the transcript data
             transcript_data = transcript.fetch()
 
-            # Build segments
+            # Build segments (new API returns objects with attributes, not dicts)
             segments = [
                 TranscriptSegment(
-                    text=entry["text"],
-                    start=entry["start"],
-                    duration=entry["duration"],
+                    text=entry.text,
+                    start=entry.start,
+                    duration=entry.duration,
                 )
                 for entry in transcript_data
             ]
@@ -105,19 +108,24 @@ class TranscriptService:
 
     def _find_best_transcript(self, transcript_list, manual_first: bool = True):
         """Find the best available transcript based on preferences."""
-        # Separate manual and auto-generated transcripts
+        # Collect all available transcripts
+        all_transcripts = []
         manual_transcripts = []
         auto_transcripts = []
 
         try:
             for transcript in transcript_list:
+                all_transcripts.append(transcript)
+                logger.info(
+                    f"Found transcript: lang={transcript.language_code}, "
+                    f"auto={transcript.is_generated}"
+                )
                 if transcript.is_generated:
                     auto_transcripts.append(transcript)
                 else:
                     manual_transcripts.append(transcript)
-        except Exception:
-            # If iteration fails, try to get any transcript
-            pass
+        except Exception as e:
+            logger.warning(f"Error iterating transcripts: {e}")
 
         # Determine search order
         if manual_first:
@@ -129,21 +137,28 @@ class TranscriptService:
         for transcripts in search_order:
             for lang in self.PREFERRED_LANGUAGES:
                 for transcript in transcripts:
-                    if transcript.language_code.startswith(lang.split("-")[0]):
+                    lang_code = transcript.language_code.lower()
+                    if lang_code.startswith(lang.lower().split("-")[0]):
+                        logger.info(f"Selected transcript: {transcript.language_code}")
                         return transcript
 
-            # If no preferred language, return first available
+            # If no preferred language, return first available from this category
             if transcripts:
+                logger.info(f"Using first available: {transcripts[0].language_code}")
                 return transcripts[0]
 
-        # Last resort: try to get any transcript
+        # Last resort: return ANY available transcript
+        if all_transcripts:
+            logger.info(f"Fallback to any transcript: {all_transcripts[0].language_code}")
+            return all_transcripts[0]
+
+        # Try the built-in methods as final fallback
         try:
             return transcript_list.find_transcript(self.PREFERRED_LANGUAGES)
         except Exception:
             pass
 
         try:
-            # Try auto-generated
             return transcript_list.find_generated_transcript(self.PREFERRED_LANGUAGES)
         except Exception:
             pass
