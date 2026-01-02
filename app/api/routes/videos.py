@@ -19,7 +19,9 @@ class TranscriptResponse(BaseModel):
     id: int
     language_code: str
     is_auto_generated: bool
-    clean_content: str
+    source: str = "youtube"  # "youtube" or "whisper"
+    raw_content: str  # With timestamps
+    clean_content: str  # Plain text
     created_at: datetime
 
     class Config:

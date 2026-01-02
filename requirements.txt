@@ -8,3 +8,9 @@ streamlit>=1.30.0
 python-dotenv>=1.0.0
 pydantic-settings>=2.1.0
 httpx>=0.26.0
+
+# Whisper transcription (Milestone 4)
+openai>=1.0.0
+yt-dlp>=2024.1.0
+# pydub>=0.25.0  # Optional: for chunking files >25MB. Not compatible with Python 3.13+
+google-auth-oauthlib>=1.0.0

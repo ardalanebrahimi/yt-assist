@@ -42,7 +42,8 @@ def export_jsonl(db: Session = Depends(get_db)):
                     "channel_id": video.channel_id,
                     "language_code": transcript.language_code,
                     "is_auto_generated": transcript.is_auto_generated,
-                    "transcript": transcript.clean_content,
+                    "transcript": transcript.raw_content,  # With timestamps
+                    "transcript_clean": transcript.clean_content,  # Plain text
                 }
                 yield json.dumps(record, ensure_ascii=False) + "\n"
 
@@ -109,7 +110,7 @@ Auto-generated: {transcript.is_auto_generated}
 
 ---
 
-{transcript.clean_content}
+{transcript.raw_content}
 """
                 zip_file.writestr(f"transcripts/{filename}", content)
 

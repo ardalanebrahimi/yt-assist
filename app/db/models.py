@@ -58,6 +58,7 @@ class Transcript(Base):
     video_id = Column(String(20), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False)
     language_code = Column(String(10), nullable=False)  # e.g., "en", "fa"
     is_auto_generated = Column(Boolean, default=False)
+    source = Column(String(20), default="youtube")  # "youtube" or "whisper"
     raw_content = Column(Text, nullable=False)  # Original with timestamps
     clean_content = Column(Text, nullable=False)  # Plain text, cleaned
     created_at = Column(DateTime, default=datetime.utcnow)

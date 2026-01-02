@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Play,
+  Mic,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,11 +20,21 @@ import {
   getSyncStatus,
   syncAllVideos,
   getVideo,
+  transcribeVideo,
+  cleanupTranscript,
+  uploadCleanedToYouTube,
+  saveCleanedTranscript,
+  authenticateYouTube,
+  getYouTubeAuthStatus,
+  listYouTubeCaptions,
+  deleteYouTubeCaption,
   type Video,
   type VideoDetail,
   type SyncStatus,
+  type CleanupResponse,
 } from "@/lib/api"
 import { formatDuration, formatDate, formatNumber } from "@/lib/utils"
+import { TranscriptManager } from "@/components/TranscriptManager"
 
 export default function Library() {
   const [videos, setVideos] = useState<Video[]>([])
@@ -35,6 +46,13 @@ export default function Library() {
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [selectedVideo, setSelectedVideo] = useState<VideoDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [transcribing, setTranscribing] = useState<string | null>(null) // video ID being transcribed
+  const [cleaning, setCleaning] = useState(false)
+  const [cleanupResult, setCleanupResult] = useState<CleanupResponse | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [ytAuthStatus, setYtAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null)
+  const [authenticating, setAuthenticating] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -85,6 +103,121 @@ export default function Library() {
       console.error(err)
     }
   }
+
+  const handleTranscribe = async (videoId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setTranscribing(videoId)
+    try {
+      const result = await transcribeVideo(videoId, "fa")
+      if (result.success) {
+        // Refresh video data
+        await fetchData()
+        if (selectedVideo && selectedVideo.id === videoId) {
+          const detail = await getVideo(videoId)
+          setSelectedVideo(detail)
+        }
+        alert(`Transcription complete! Cost: ~$${result.cost_estimate?.toFixed(3) || "N/A"}`)
+      } else {
+        alert(`Transcription failed: ${result.message}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Transcription failed. Check console for details.")
+    } finally {
+      setTranscribing(null)
+    }
+  }
+
+  const handleCleanup = async (videoId: string) => {
+    setCleaning(true)
+    setCleanupResult(null)
+    try {
+      const result = await cleanupTranscript(videoId, "fa", true)
+      if (result.success) {
+        setCleanupResult(result)
+      } else {
+        alert(`Cleanup failed: ${result.message}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Cleanup failed. Check console for details.")
+    } finally {
+      setCleaning(false)
+    }
+  }
+
+  const handleUploadToYouTube = async (videoId: string, content: string) => {
+    setUploading(true)
+    try {
+      const result = await uploadCleanedToYouTube(videoId, content, "fa", false)
+      if (result.success) {
+        alert("Successfully uploaded to YouTube!")
+        setCleanupResult(null)
+      } else {
+        alert(`Upload failed: ${result.message}`)
+      }
+    } catch (err: any) {
+      console.error(err)
+      alert(`Upload failed: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleSaveCleaned = async (videoId: string, content: string) => {
+    setSaving(true)
+    try {
+      const result = await saveCleanedTranscript(videoId, content, "fa")
+      if (result.success) {
+        alert("Cleaned transcript saved!")
+        // Refresh video data
+        const detail = await getVideo(videoId)
+        setSelectedVideo(detail)
+        setCleanupResult(null)
+      } else {
+        alert(`Save failed: ${result.message}`)
+      }
+    } catch (err: any) {
+      console.error(err)
+      alert(`Save failed: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const checkYouTubeAuth = async () => {
+    try {
+      const status = await getYouTubeAuthStatus()
+      setYtAuthStatus(status)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleYouTubeAuth = async () => {
+    setAuthenticating(true)
+    try {
+      const result = await authenticateYouTube()
+      if (result.success) {
+        alert("YouTube authentication successful!")
+        await checkYouTubeAuth()
+      } else {
+        alert(`Authentication failed: ${result.message}`)
+      }
+    } catch (err: any) {
+      console.error(err)
+      alert(`Authentication failed: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setAuthenticating(false)
+    }
+  }
+
+  // Check YouTube auth status on modal open
+  useEffect(() => {
+    if (selectedVideo) {
+      checkYouTubeAuth()
+    }
+  }, [selectedVideo])
 
   const getStatusBadge = (video: Video) => {
     if (video.sync_status === "synced") {
@@ -302,6 +435,18 @@ export default function Library() {
                           <ExternalLink className="h-3 w-3" />
                           Watch on YouTube
                         </a>
+                        {video.sync_status === "synced" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs"
+                            onClick={(e) => handleTranscribe(video.id, e)}
+                            disabled={transcribing === video.id}
+                          >
+                            <Mic className={`h-3 w-3 mr-1 ${transcribing === video.id ? "animate-pulse" : ""}`} />
+                            {transcribing === video.id ? "Transcribing..." : "Whisper"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -323,7 +468,10 @@ export default function Library() {
       {selectedVideo && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedVideo(null)}
+          onClick={() => {
+            setSelectedVideo(null)
+            setCleanupResult(null)
+          }}
         >
           <Card className="max-w-2xl w-full max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
@@ -362,22 +510,51 @@ export default function Library() {
                 </div>
               )}
 
-              {selectedVideo.transcripts && selectedVideo.transcripts.length > 0 ? (
-                <div>
-                  <h4 className="font-medium mb-2">Transcript</h4>
-                  <div className="bg-muted rounded-md p-3 max-h-60 overflow-auto text-sm">
-                    {selectedVideo.transcripts[0].clean_content.substring(0, 2000)}
-                    {selectedVideo.transcripts[0].clean_content.length > 2000 && "..."}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3 text-sm">
-                  No transcript available for this video
+              {/* YouTube Auth Status */}
+              {ytAuthStatus && !ytAuthStatus.authenticated && (
+                <div className="flex items-center gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                  <span className="text-sm text-yellow-800 dark:text-yellow-200">
+                    YouTube not authenticated
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleYouTubeAuth}
+                    disabled={authenticating}
+                  >
+                    {authenticating ? "Authenticating..." : "Authenticate YouTube"}
+                  </Button>
                 </div>
               )}
 
+              {/* Transcript Manager */}
+              <TranscriptManager
+                videoId={selectedVideo.id}
+                transcripts={selectedVideo.transcripts || []}
+                onCleanup={() => handleCleanup(selectedVideo.id)}
+                onTranscribe={() => handleTranscribe(selectedVideo.id)}
+                onUploadToYouTube={(content) => handleUploadToYouTube(selectedVideo.id, content)}
+                onSaveTranscript={(content) => handleSaveCleaned(selectedVideo.id, content)}
+                isTranscribing={transcribing === selectedVideo.id}
+                isCleaning={cleaning}
+                isUploading={uploading}
+                isSaving={saving}
+                cleanupResult={cleanupResult && cleanupResult.original && cleanupResult.cleaned ? {
+                  original: cleanupResult.original,
+                  cleaned: cleanupResult.cleaned,
+                  changes_summary: cleanupResult.changes_summary,
+                } : null}
+                onCleanupDiscard={() => setCleanupResult(null)}
+                durationSeconds={selectedVideo.duration_seconds || 0}
+                fetchYouTubeCaptions={() => listYouTubeCaptions(selectedVideo.id)}
+                deleteYouTubeCaption={(captionId) => deleteYouTubeCaption(selectedVideo.id, captionId)}
+              />
+
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSelectedVideo(null)}>
+                <Button variant="outline" onClick={() => {
+                  setSelectedVideo(null)
+                  setCleanupResult(null)
+                }}>
                   Close
                 </Button>
                 <Button

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     channel_id: str = "UCmHxUdpnCfQTQtwbxN9mtOA"
 
+    # OpenAI API (for Whisper)
+    openai_api_key: str = ""
+
     # Database
     database_url: str = "sqlite:///./data/yt_assist.db"
 

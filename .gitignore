@@ -55,3 +55,5 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+.env.example
+data/client_secrets.json
