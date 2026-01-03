@@ -11,6 +11,7 @@ import {
   Play,
   Mic,
   Layers,
+  MessageSquare,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -301,6 +302,13 @@ export default function Library() {
               <p className="text-sm text-muted-foreground">Video Library</p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => window.location.hash = "qa"}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Ask Videos
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => window.location.hash = "batch"}

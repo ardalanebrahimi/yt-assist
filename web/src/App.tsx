@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react"
 import Library from "./pages/Library"
 import BatchOperations from "./pages/BatchOperations"
+import QA from "./pages/QA"
 
-type Page = "library" | "batch"
+type Page = "library" | "batch" | "qa"
 
 function App() {
   const [page, setPage] = useState<Page>("library")
@@ -13,6 +14,8 @@ function App() {
       const hash = window.location.hash.slice(1)
       if (hash === "batch") {
         setPage("batch")
+      } else if (hash === "qa") {
+        setPage("qa")
       } else {
         setPage("library")
       }
@@ -32,6 +35,10 @@ function App() {
 
   if (page === "batch") {
     return <BatchOperations />
+  }
+
+  if (page === "qa") {
+    return <QA />
   }
 
   return <Library />

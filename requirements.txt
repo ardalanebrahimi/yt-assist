@@ -15,3 +15,6 @@ yt-dlp>=2024.1.0
 pydub>=0.25.0
 audioop-lts>=0.2.1  # Provides audioop for Python 3.13+
 google-auth-oauthlib>=1.0.0
+
+# RAG Layer (Milestone 2)
+faiss-cpu>=1.7.0

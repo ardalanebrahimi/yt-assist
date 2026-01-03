@@ -412,3 +412,91 @@ export function createBatchCleanupStream(
   params.set("preserve_timestamps", preserveTimestamps.toString())
   return new EventSource(`${API_BASE}/batch/cleanup/run?${params.toString()}`)
 }
+
+// RAG API Types and Functions
+
+export interface AskResponse {
+  answer: string
+  sources: {
+    video_id: string
+    title: string
+    url: string
+  }[]
+  chunks_used: number
+}
+
+export interface SearchResult {
+  text: string
+  video_id: string
+  video_title: string
+  score: number
+  rank: number
+}
+
+export interface IndexStats {
+  total_chunks: number
+  videos_indexed: number
+  embedding_model: string
+  chunk_size: number
+  chunk_overlap: number
+}
+
+export interface IndexResult {
+  videos_processed: number
+  total_chunks: number
+  errors: { video_id: string; error: string }[]
+}
+
+export interface IndexedVideosResponse {
+  total_videos: number
+  videos: {
+    video_id: string
+    title: string
+    chunks: number
+  }[]
+}
+
+export async function askQuestion(
+  question: string,
+  topK: number = 5
+): Promise<AskResponse> {
+  const { data } = await api.post("/rag/ask", { question, top_k: topK })
+  return data
+}
+
+export async function semanticSearch(
+  query: string,
+  topK: number = 10
+): Promise<SearchResult[]> {
+  const { data } = await api.post("/rag/search", { query, top_k: topK })
+  return data
+}
+
+export async function getIndexStats(): Promise<IndexStats> {
+  const { data } = await api.get("/rag/stats")
+  return data
+}
+
+export async function indexAllVideos(): Promise<IndexResult> {
+  const { data } = await api.post("/rag/index/all")
+  return data
+}
+
+export async function indexVideo(videoId: string): Promise<{
+  video_id: string
+  chunks_indexed: number
+  message: string
+}> {
+  const { data } = await api.post(`/rag/index/${videoId}`)
+  return data
+}
+
+export async function getIndexedVideos(): Promise<IndexedVideosResponse> {
+  const { data } = await api.get("/rag/videos/indexed")
+  return data
+}
+
+export async function clearIndex(): Promise<{ message: string }> {
+  const { data } = await api.delete("/rag/index")
+  return data
+}

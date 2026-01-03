@@ -9,10 +9,11 @@
 | Milestone | Status | Description |
 |-----------|--------|-------------|
 | **Milestone 1** | ✅ Complete | Subtitle Ingestion MVP |
-| **Milestone 2** | ❌ Not Started | RAG Layer |
+| **Milestone 2** | ✅ Complete | RAG Layer |
 | **Milestone 3** | ❌ Not Started | Style / Tone Modeling |
 | **Milestone 4** | ✅ Complete | Whisper Transcription & Subtitle Management |
 | **Milestone 4.5** | ✅ Complete | AI Dubbing (bonus feature) |
+| **Milestone 4.6** | ✅ Complete | Batch Processing |
 | **Milestone 5** | ❌ Not Started | YouTube Assistant Workflows |
 
 ---
@@ -40,25 +41,31 @@
 
 ---
 
-## Milestone 2 – RAG Layer ⏳ NEXT
+## Milestone 2 – RAG Layer ✅ COMPLETE
 
-### 2.1 Implement Chunking Pipeline
-- Split transcripts into time-based chunks with overlap
+### 2.1 Implement Chunking Pipeline ✅
+- Split transcripts into character-based chunks with overlap (500 chars, 100 overlap)
+- Sentence boundary detection for clean breaks
 
-### 2.2 Implement Embeddings + Vector Store
-- Generate embeddings for each chunk
-- Store in ChromaDB with metadata
+### 2.2 Implement Embeddings + Vector Store ✅
+- OpenAI text-embedding-3-small for embeddings
+- FAISS for vector storage (ChromaDB had compatibility issues with Python 3.13)
+- Persistent storage to disk
 
-### 2.3 Implement RAG API
-- `POST /ask` → question
-- Internally:
-  - Search in vector store
-  - Call one base model
-  - Answer + cite sources
+### 2.3 Implement RAG API ✅
+- `POST /rag/ask` - Ask questions with RAG
+- `POST /rag/search` - Semantic search across transcripts
+- `POST /rag/index/all` - Index all videos
+- `POST /rag/index/{video_id}` - Index single video
+- `GET /rag/stats` - Get index statistics
+- `GET /rag/videos/indexed` - List indexed videos
+- `DELETE /rag/index` - Clear index
 
-### 2.4 Add Simple UI for Q&A + Citations
-- Chat interface with source references
-- Display video titles and timestamps
+### 2.4 Add Simple UI for Q&A + Citations ✅
+- Chat interface with conversation history
+- Index management panel (index all, clear, stats)
+- Source citations with video links
+- Real-time response streaming
 
 ---
 
@@ -134,7 +141,7 @@
 
 ---
 
-## Milestone 4.6 – Batch Processing with Real-time Progress ⏳ IN PROGRESS
+## Milestone 4.6 – Batch Processing with Real-time Progress ✅ COMPLETE
 
 ### 4.6.1 Batch Operations UI
 - Dedicated batch operations page
@@ -221,16 +228,14 @@ GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
 | YouTube Captions | `app/services/youtube_captions.py` | Upload/manage captions |
 | Transcript Cleanup | `app/services/transcript_cleanup.py` | GPT cleanup |
 | Dubbing Service | `app/services/dubbing.py` | Translation + TTS |
+| RAG Service | `app/services/rag.py` | Embeddings, search, Q&A |
 
 ---
 
 ## Next Steps
 
-**Immediate:** Milestone 2 - RAG Layer
-1. Implement chunking pipeline for transcripts
-2. Set up ChromaDB for vector storage
-3. Generate embeddings using text-embedding-3-small
-4. Create search API endpoint
-5. Build Q&A chat interface
+**Next:** Milestone 3 (Style/Tone Modeling) or Milestone 5 (YouTube Assistant Workflows)
 
-**After RAG:** Milestone 3 or 5 based on priority
+Suggested order:
+1. **Milestone 5** - YouTube Assistant Workflows (New Video Wizard, Series Planner, Clip Finder)
+2. **Milestone 3** - Style/Tone Modeling (requires labeled training data)
