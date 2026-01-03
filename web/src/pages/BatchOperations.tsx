@@ -62,6 +62,7 @@ export default function BatchOperations() {
   const [eventSource, setEventSource] = useState<EventSource | null>(null)
   const [progress, setProgress] = useState({ current: 0, total: 0, completed: 0, skipped: 0, failed: 0 })
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null)
+  const [autoUpload, setAutoUpload] = useState(true)
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)
@@ -136,7 +137,7 @@ export default function BatchOperations() {
     // no-transcript and whisper both use Whisper stream
     const es = operationType === "cleanup"
       ? createBatchCleanupStream(selectedIds)
-      : createBatchWhisperStream(selectedIds)
+      : createBatchWhisperStream(selectedIds, "fa", autoUpload)
 
     es.addEventListener("start", (e) => {
       const data = JSON.parse(e.data)
@@ -381,7 +382,7 @@ export default function BatchOperations() {
         )}
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           {!isRunning ? (
             <>
               <Button onClick={startBatch} disabled={selectedVideos.length === 0}>
@@ -394,6 +395,18 @@ export default function BatchOperations() {
               <Button variant="outline" onClick={deselectAll} disabled={loading}>
                 Deselect All
               </Button>
+              {/* Auto-upload toggle (only for Whisper operations) */}
+              {operationType !== "cleanup" && (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoUpload}
+                    onChange={(e) => setAutoUpload(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <span>Auto-upload to YouTube</span>
+                </label>
+              )}
             </>
           ) : (
             <Button variant="destructive" onClick={cancelBatch}>

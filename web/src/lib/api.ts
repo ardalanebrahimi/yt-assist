@@ -420,13 +420,15 @@ export async function getBatchCleanupCandidates(): Promise<BatchCandidatesRespon
 
 export function createBatchWhisperStream(
   videoIds?: string[],
-  language: string = "fa"
+  language: string = "fa",
+  autoUpload: boolean = true
 ): EventSource {
   const params = new URLSearchParams()
   if (videoIds && videoIds.length > 0) {
     params.set("video_ids", videoIds.join(","))
   }
   params.set("language", language)
+  params.set("auto_upload", autoUpload.toString())
   return new EventSource(`${API_BASE}/batch/whisper/run?${params.toString()}`)
 }
 

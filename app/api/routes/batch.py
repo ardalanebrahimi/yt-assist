@@ -242,6 +242,7 @@ def get_cleanup_candidates(
 async def batch_whisper(
     video_ids: Optional[str] = Query(None, description="Comma-separated video IDs, or empty for all candidates"),
     language: str = Query("fa", description="Language code"),
+    auto_upload: bool = Query(True, description="Automatically upload to YouTube after transcription"),
     db: Session = Depends(get_db),
 ):
     """Run Whisper transcription on multiple videos with SSE progress updates."""
@@ -270,6 +271,7 @@ async def batch_whisper(
 
     async def generate():
         from app.services.whisper import WhisperService
+        from app.services.youtube_captions import YouTubeCaptionService
 
         total = len(videos)
         completed = 0
@@ -278,14 +280,27 @@ async def batch_whisper(
 
         yield sse_message("start", {
             "total": total,
-            "message": f"Starting Whisper transcription for {total} videos"
+            "message": f"Starting Whisper transcription for {total} videos" + (" (with auto-upload)" if auto_upload else "")
         })
 
         try:
-            service = WhisperService(api_key=settings.openai_api_key)
+            whisper_service = WhisperService(api_key=settings.openai_api_key)
         except Exception as e:
             yield sse_message("error", {"message": f"Failed to initialize Whisper: {str(e)}"})
             return
+
+        # Initialize YouTube caption service if auto_upload is enabled
+        caption_service = None
+        if auto_upload:
+            try:
+                caption_service = YouTubeCaptionService()
+                # Check if authenticated
+                if not caption_service.is_authenticated():
+                    logger.warning("YouTube not authenticated, auto-upload will be skipped")
+                    caption_service = None
+            except Exception as e:
+                logger.warning(f"Failed to initialize YouTube caption service: {e}")
+                caption_service = None
 
         for i, video in enumerate(videos):
             # Check again if already has whisper (in case of concurrent runs)
@@ -322,7 +337,7 @@ async def batch_whisper(
             })
 
             try:
-                result = service.transcribe_video(video.id, language=language)
+                result = whisper_service.transcribe_video(video.id, language=language)
 
                 if result:
                     # Save to database
@@ -337,6 +352,22 @@ async def batch_whisper(
                     db.add(transcript)
                     db.commit()
 
+                    # Auto-upload to YouTube if enabled and service is available
+                    upload_status = ""
+                    if caption_service:
+                        try:
+                            caption_service.upload_caption(
+                                video_id=video.id,
+                                transcript=result.raw_content,
+                                language=language,
+                                name=f"Whisper ({language})",
+                                replace_existing=True,
+                            )
+                            upload_status = " + uploaded to YouTube"
+                        except Exception as upload_err:
+                            logger.error(f"Failed to upload caption for {video.id}: {upload_err}")
+                            upload_status = " (upload failed)"
+
                     completed += 1
                     yield sse_message("progress", {
                         "current": i + 1,
@@ -344,7 +375,7 @@ async def batch_whisper(
                         "video_id": video.id,
                         "title": video.title,
                         "status": "done",
-                        "message": "Transcription complete",
+                        "message": f"Transcription complete{upload_status}",
                         "completed": completed,
                         "skipped": skipped,
                         "failed": failed,
