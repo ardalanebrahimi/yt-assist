@@ -15,6 +15,38 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _find_ffmpeg() -> str | None:
+    """Find FFmpeg installation path."""
+    import shutil
+
+    # Check if ffmpeg is in PATH
+    if shutil.which("ffmpeg"):
+        return None  # Use system PATH
+
+    # Common Windows installation paths
+    common_paths = [
+        Path("C:/Program Files/Shotcut"),
+        Path("C:/Program Files/ffmpeg/bin"),
+        Path("C:/ffmpeg/bin"),
+        Path("C:/tools/ffmpeg/bin"),
+        Path.home() / "AppData/Local/Microsoft/WinGet/Links",
+    ]
+
+    for path in common_paths:
+        ffmpeg_exe = path / "ffmpeg.exe"
+        if ffmpeg_exe.exists():
+            return str(path)
+
+    return None
+
+
+# Configure pydub to find FFmpeg
+_ffmpeg_path = _find_ffmpeg()
+if _ffmpeg_path:
+    AudioSegment.converter = str(Path(_ffmpeg_path) / "ffmpeg.exe")
+    AudioSegment.ffprobe = str(Path(_ffmpeg_path) / "ffprobe.exe")
+
+
 @dataclass
 class TranscriptSegment:
     """A segment of transcript with timing."""
@@ -137,10 +169,6 @@ class DubbingService:
         if not segments:
             return segments
 
-        # Batch translate for efficiency
-        texts = [s.text for s in segments]
-        numbered_text = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
-
         lang_names = {
             "fa": "Persian (Farsi)",
             "en": "English",
@@ -166,6 +194,7 @@ RULES:
 3. Keep the same tone and style as the original
 4. Each line is numbered - keep the same numbering in your output
 5. Output ONLY the translations, one per line, with the same numbering
+6. You MUST translate ALL lines provided - do not skip any
 
 Example input:
 1. سلام به همه
@@ -175,46 +204,62 @@ Example output:
 1. Hello everyone
 2. Today we're going to talk about clean code"""
 
-        user_prompt = f"Translate these {source_name} lines to {target_name}:\n\n{numbered_text}"
+        # Process in batches of 50 segments to avoid truncation
+        BATCH_SIZE = 50
+        all_translations = {}
 
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.3,
+        for batch_start in range(0, len(segments), BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, len(segments))
+            batch_segments = segments[batch_start:batch_end]
+
+            # Create numbered text for this batch (use global indices)
+            numbered_text = "\n".join(
+                f"{batch_start + i + 1}. {s.text}"
+                for i, s in enumerate(batch_segments)
             )
 
-            translated = response.choices[0].message.content.strip()
+            user_prompt = f"Translate these {source_name} lines to {target_name}:\n\n{numbered_text}"
 
-            # Parse numbered translations
-            translations = {}
-            for line in translated.split("\n"):
-                match = re.match(r"(\d+)\.\s*(.+)", line.strip())
-                if match:
-                    idx = int(match.group(1)) - 1
-                    text = match.group(2).strip()
-                    translations[idx] = text
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=4000,
+                )
 
-            # Apply translations to segments
-            for i, segment in enumerate(segments):
-                if i in translations:
-                    segment.translated_text = translations[i]
-                else:
-                    # Fallback: keep original
-                    segment.translated_text = segment.text
-                    logger.warning(f"Missing translation for segment {i}")
+                translated = response.choices[0].message.content.strip()
 
-            return segments
+                # Parse numbered translations
+                for line in translated.split("\n"):
+                    match = re.match(r"(\d+)\.\s*(.+)", line.strip())
+                    if match:
+                        idx = int(match.group(1)) - 1  # Convert to 0-based
+                        text = match.group(2).strip()
+                        all_translations[idx] = text
 
-        except Exception as e:
-            logger.error(f"Translation error: {e}")
-            # Fallback: copy original text
-            for segment in segments:
+                logger.info(f"Translated batch {batch_start}-{batch_end} ({len(batch_segments)} segments)")
+
+            except Exception as e:
+                logger.error(f"Translation error for batch {batch_start}-{batch_end}: {e}")
+
+        # Apply all translations to segments
+        missing_count = 0
+        for i, segment in enumerate(segments):
+            if i in all_translations:
+                segment.translated_text = all_translations[i]
+            else:
+                # Fallback: keep original
                 segment.translated_text = segment.text
-            return segments
+                missing_count += 1
+
+        if missing_count > 0:
+            logger.warning(f"Missing translations for {missing_count} segments")
+
+        return segments
 
     def generate_segment_audio(
         self,
