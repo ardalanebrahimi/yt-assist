@@ -90,6 +90,11 @@ export default function BatchOperations() {
   const selectedVideos = videos.filter(v => v.selected)
   const selectedCost = selectedVideos.reduce((sum, v) => sum + (v.estimated_cost || 0), 0)
 
+  // Create a lookup map for video status details
+  const videoStatusMap = new Map(
+    statusSummary?.videos.map(v => [v.id, v]) || []
+  )
+
   const toggleVideo = (id: string) => {
     setVideos(prev => prev.map(v =>
       v.id === id ? { ...v, selected: !v.selected } : v
@@ -452,16 +457,45 @@ export default function BatchOperations() {
                     {/* Video Info */}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{video.title}</div>
-                      <div className="text-xs text-muted-foreground flex gap-3">
+                      <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-2 mt-1">
                         {video.duration_seconds && (
                           <span>{Math.round(video.duration_seconds / 60)} min</span>
                         )}
                         {video.estimated_cost !== undefined && (
-                          <span>${video.estimated_cost.toFixed(3)}</span>
+                          <span className="text-orange-600">${video.estimated_cost.toFixed(3)}</span>
                         )}
+                        {/* Video Status Badges */}
+                        {(() => {
+                          const status = videoStatusMap.get(video.id)
+                          if (!status) return null
+                          return (
+                            <>
+                              {status.has_youtube && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                                  YT Sub
+                                </Badge>
+                              )}
+                              {status.has_whisper && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-200">
+                                  Whisper
+                                </Badge>
+                              )}
+                              {status.has_cleaned && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
+                                  Cleaned
+                                </Badge>
+                              )}
+                              {!status.has_youtube && !status.has_whisper && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-red-50 text-red-700 border-red-200">
+                                  No Transcript
+                                </Badge>
+                              )}
+                            </>
+                          )
+                        })()}
                         {video.source && (
-                          <Badge variant="outline" className="text-xs">
-                            {video.source}
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            src: {video.source}
                           </Badge>
                         )}
                       </div>
