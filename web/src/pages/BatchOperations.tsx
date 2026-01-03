@@ -21,9 +21,11 @@ import {
   getBatchCleanupCandidates,
   createBatchWhisperStream,
   createBatchCleanupStream,
+  getVideoStatusSummary,
   type BatchCandidate,
   type BatchCandidatesResponse,
   type BatchProgressEvent,
+  type VideoStatusSummary,
 } from "@/lib/api"
 
 type OperationType = "whisper" | "cleanup"
@@ -43,6 +45,7 @@ export default function BatchOperations() {
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [alreadyDone, setAlreadyDone] = useState<{ id: string; title: string }[]>([])
   const [summary, setSummary] = useState<BatchCandidatesResponse["summary"] | null>(null)
+  const [statusSummary, setStatusSummary] = useState<VideoStatusSummary | null>(null)
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -61,13 +64,17 @@ export default function BatchOperations() {
   const loadCandidates = useCallback(async () => {
     setLoading(true)
     try {
-      const data = operationType === "whisper"
-        ? await getBatchWhisperCandidates()
-        : await getBatchCleanupCandidates()
+      const [data, statusData] = await Promise.all([
+        operationType === "whisper"
+          ? getBatchWhisperCandidates()
+          : getBatchCleanupCandidates(),
+        getVideoStatusSummary(),
+      ])
 
       setVideos(data.candidates.map(c => ({ ...c, selected: true, status: "pending" as VideoStatus })))
       setAlreadyDone(data.already_done)
       setSummary(data.summary)
+      setStatusSummary(statusData)
       setCurrentPage(1)
     } catch (err) {
       console.error("Failed to load candidates:", err)
@@ -243,11 +250,58 @@ export default function BatchOperations() {
           </Button>
         </div>
 
-        {/* Summary Card */}
+        {/* Overall Video Status Summary */}
+        {statusSummary && (
+          <Card className="border-slate-200 dark:border-slate-700">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Overall Video Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 text-sm">
+                <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded">
+                  <div className="text-2xl font-bold">{statusSummary.summary.total_videos}</div>
+                  <span className="text-muted-foreground text-xs">Total Videos</span>
+                </div>
+                <div className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                  <div className="text-2xl font-bold text-blue-600">{statusSummary.summary.with_youtube_subtitle}</div>
+                  <span className="text-muted-foreground text-xs">YouTube Subs</span>
+                </div>
+                <div className="text-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                  <div className="text-2xl font-bold text-purple-600">{statusSummary.summary.with_whisper}</div>
+                  <span className="text-muted-foreground text-xs">Whisper Done</span>
+                </div>
+                <div className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                  <div className="text-2xl font-bold text-green-600">{statusSummary.summary.with_cleaned}</div>
+                  <span className="text-muted-foreground text-xs">Cleaned</span>
+                </div>
+                <div className="text-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                  <div className="text-2xl font-bold text-red-600">{statusSummary.summary.no_transcript}</div>
+                  <span className="text-muted-foreground text-xs">No Transcript</span>
+                </div>
+                <div className="text-center p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
+                  <div className="text-2xl font-bold text-orange-600">{statusSummary.summary.needs_whisper}</div>
+                  <span className="text-muted-foreground text-xs">Needs Whisper</span>
+                </div>
+                <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
+                  <div className="text-2xl font-bold text-yellow-600">{statusSummary.summary.needs_cleanup}</div>
+                  <span className="text-muted-foreground text-xs">Needs Cleanup</span>
+                </div>
+                <div className="text-center p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded">
+                  <div className="text-2xl font-bold text-emerald-600">{statusSummary.summary.fully_processed}</div>
+                  <span className="text-muted-foreground text-xs">Fully Done</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Operation Summary Card */}
         {summary && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Summary</CardTitle>
+              <CardTitle className="text-lg">
+                {operationType === "whisper" ? "Whisper" : "Cleanup"} Batch
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">

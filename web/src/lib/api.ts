@@ -376,7 +376,33 @@ export interface BatchCompleteEvent {
   message: string
 }
 
+export interface VideoStatusSummary {
+  summary: {
+    total_videos: number
+    with_youtube_subtitle: number
+    with_whisper: number
+    with_cleaned: number
+    no_transcript: number
+    needs_whisper: number
+    needs_cleanup: number
+    fully_processed: number
+  }
+  videos: {
+    id: string
+    title: string
+    duration_seconds: number | null
+    has_youtube: boolean
+    has_whisper: boolean
+    has_cleaned: boolean
+  }[]
+}
+
 // Batch Processing API Functions
+export async function getVideoStatusSummary(): Promise<VideoStatusSummary> {
+  const { data } = await api.get("/batch/status/summary")
+  return data
+}
+
 export async function getBatchWhisperCandidates(): Promise<BatchCandidatesResponse> {
   const { data } = await api.get("/batch/whisper/candidates")
   return data

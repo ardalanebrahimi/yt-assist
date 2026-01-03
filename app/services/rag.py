@@ -17,9 +17,9 @@ from app.db.models import Video, Transcript
 # Configuration
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSION = 1536
-CHUNK_SIZE = 500  # characters per chunk
-CHUNK_OVERLAP = 100  # overlap between chunks
-TOP_K_RESULTS = 5  # number of chunks to retrieve
+CHUNK_SIZE = 1500  # characters per chunk (larger for better context)
+CHUNK_OVERLAP = 200  # overlap between chunks
+TOP_K_RESULTS = 10  # number of chunks to retrieve
 
 
 class RAGService:
@@ -323,20 +323,28 @@ class RAGService:
         context = "\n\n---\n\n".join(context_parts)
 
         # Create prompt
-        system_prompt = """You are a helpful assistant that answers questions about YouTube video content.
-You will be given relevant excerpts from video transcripts and should answer based on that information.
-If the information doesn't contain the answer, say so honestly.
-Always cite which video(s) your answer is based on.
-Respond in the same language as the question."""
+        system_prompt = """You are Ardalan's personal YouTube content assistant. You have access to transcripts from his YouTube videos and should provide comprehensive, detailed answers based on this content.
 
-        user_prompt = f"""Based on the following video transcript excerpts, please answer this question:
+Your guidelines:
+1. **Be thorough**: Provide detailed, well-structured answers. Don't be brief - elaborate on the topic with examples and explanations from the videos.
+2. **Synthesize information**: Combine insights from multiple video excerpts when relevant to give a complete picture.
+3. **Quote when useful**: Include relevant quotes or key phrases from the transcripts to support your answer.
+4. **Cite sources**: Always mention which video(s) your answer draws from.
+5. **Be honest**: If the excerpts don't contain enough information, say so, but still try to provide what you can.
+6. **Match the language**: Respond in the same language as the question (Persian/Farsi or English).
+7. **Maintain Ardalan's perspective**: Remember these are Ardalan's own words and opinions - present them as such."""
+
+        user_prompt = f"""Based on the following video transcript excerpts, please answer this question comprehensively:
 
 Question: {question}
 
-Relevant excerpts:
+Relevant excerpts from videos:
 {context}
 
-Please provide a clear, concise answer based on the excerpts above. Cite which videos you used."""
+Please provide a thorough, detailed answer. Include:
+- Key points and explanations from the videos
+- Relevant examples or quotes if available
+- Which video(s) your answer is based on"""
 
         # Call GPT
         response = self.client.chat.completions.create(

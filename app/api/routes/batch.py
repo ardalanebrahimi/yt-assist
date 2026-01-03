@@ -16,6 +16,65 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/status/summary")
+def get_video_status_summary(
+    db: Session = Depends(get_db),
+):
+    """Get summary of all video states (transcripts, cleanup status, etc.)."""
+    # Get all synced videos
+    videos = db.query(Video).filter(Video.sync_status == "synced").all()
+
+    summary = {
+        "total_videos": len(videos),
+        "with_youtube_subtitle": 0,
+        "with_whisper": 0,
+        "with_cleaned": 0,
+        "no_transcript": 0,
+        "needs_whisper": 0,
+        "needs_cleanup": 0,
+        "fully_processed": 0,
+    }
+
+    video_details = []
+
+    for video in videos:
+        transcripts = db.query(Transcript).filter(Transcript.video_id == video.id).all()
+
+        has_youtube = any(t.source == "youtube" for t in transcripts)
+        has_whisper = any(t.source == "whisper" for t in transcripts)
+        has_cleaned = any(t.source == "cleaned" for t in transcripts)
+        has_any = len(transcripts) > 0
+
+        if has_youtube:
+            summary["with_youtube_subtitle"] += 1
+        if has_whisper:
+            summary["with_whisper"] += 1
+        if has_cleaned:
+            summary["with_cleaned"] += 1
+        if not has_any:
+            summary["no_transcript"] += 1
+        if not has_whisper:
+            summary["needs_whisper"] += 1
+        if has_any and not has_cleaned:
+            summary["needs_cleanup"] += 1
+        if has_whisper and has_cleaned:
+            summary["fully_processed"] += 1
+
+        video_details.append({
+            "id": video.id,
+            "title": video.title,
+            "duration_seconds": video.duration_seconds,
+            "has_youtube": has_youtube,
+            "has_whisper": has_whisper,
+            "has_cleaned": has_cleaned,
+        })
+
+    return {
+        "summary": summary,
+        "videos": video_details,
+    }
+
+
 def sse_message(event: str, data: dict) -> str:
     """Format a Server-Sent Event message."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
