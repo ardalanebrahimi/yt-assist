@@ -403,6 +403,11 @@ export async function getVideoStatusSummary(): Promise<VideoStatusSummary> {
   return data
 }
 
+export async function getNoTranscriptCandidates(): Promise<BatchCandidatesResponse> {
+  const { data } = await api.get("/batch/no-transcript/candidates")
+  return data
+}
+
 export async function getBatchWhisperCandidates(): Promise<BatchCandidatesResponse> {
   const { data } = await api.get("/batch/whisper/candidates")
   return data

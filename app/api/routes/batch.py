@@ -75,6 +75,52 @@ def get_video_status_summary(
     }
 
 
+@router.get("/no-transcript/candidates")
+def get_no_transcript_candidates(
+    db: Session = Depends(get_db),
+):
+    """Get videos that have no transcript at all (neither YouTube nor Whisper)."""
+    # Get all synced videos
+    videos = db.query(Video).filter(Video.sync_status == "synced").all()
+
+    candidates = []
+    has_transcript = []
+
+    for video in videos:
+        # Check if video has any transcript (youtube or whisper)
+        has_any = db.query(Transcript).filter(
+            Transcript.video_id == video.id,
+            Transcript.source.in_(["youtube", "whisper"])
+        ).first() is not None
+
+        if has_any:
+            has_transcript.append({
+                "id": video.id,
+                "title": video.title,
+            })
+        else:
+            candidates.append({
+                "id": video.id,
+                "title": video.title,
+                "duration_seconds": video.duration_seconds,
+                "estimated_cost": round((video.duration_seconds or 0) / 60 * 0.006, 3),
+            })
+
+    total_cost = sum(c["estimated_cost"] for c in candidates)
+    total_duration = sum(c["duration_seconds"] or 0 for c in candidates)
+
+    return {
+        "candidates": candidates,
+        "already_done": has_transcript,
+        "summary": {
+            "total_candidates": len(candidates),
+            "already_done": len(has_transcript),
+            "total_duration_minutes": round(total_duration / 60, 1),
+            "estimated_total_cost": round(total_cost, 2),
+        }
+    }
+
+
 def sse_message(event: str, data: dict) -> str:
     """Format a Server-Sent Event message."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"

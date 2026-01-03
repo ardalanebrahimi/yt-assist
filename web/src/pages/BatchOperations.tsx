@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  FileX,
 } from "lucide-react"
 import {
   getBatchWhisperCandidates,
@@ -22,13 +23,14 @@ import {
   createBatchWhisperStream,
   createBatchCleanupStream,
   getVideoStatusSummary,
+  getNoTranscriptCandidates,
   type BatchCandidate,
   type BatchCandidatesResponse,
   type BatchProgressEvent,
   type VideoStatusSummary,
 } from "@/lib/api"
 
-type OperationType = "whisper" | "cleanup"
+type OperationType = "no-transcript" | "whisper" | "cleanup"
 type VideoStatus = "pending" | "processing" | "done" | "skipped" | "failed" | "excluded"
 
 interface VideoItem extends BatchCandidate {
@@ -40,7 +42,7 @@ interface VideoItem extends BatchCandidate {
 const ITEMS_PER_PAGE = 10
 
 export default function BatchOperations() {
-  const [operationType, setOperationType] = useState<OperationType>("whisper")
+  const [operationType, setOperationType] = useState<OperationType>("no-transcript")
   const [loading, setLoading] = useState(true)
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [alreadyDone, setAlreadyDone] = useState<{ id: string; title: string }[]>([])
@@ -64,10 +66,18 @@ export default function BatchOperations() {
   const loadCandidates = useCallback(async () => {
     setLoading(true)
     try {
+      const getCandidates = () => {
+        switch (operationType) {
+          case "no-transcript":
+            return getNoTranscriptCandidates()
+          case "whisper":
+            return getBatchWhisperCandidates()
+          case "cleanup":
+            return getBatchCleanupCandidates()
+        }
+      }
       const [data, statusData] = await Promise.all([
-        operationType === "whisper"
-          ? getBatchWhisperCandidates()
-          : getBatchCleanupCandidates(),
+        getCandidates(),
         getVideoStatusSummary(),
       ])
 
@@ -123,9 +133,10 @@ export default function BatchOperations() {
       message: undefined,
     })))
 
-    const es = operationType === "whisper"
-      ? createBatchWhisperStream(selectedIds)
-      : createBatchCleanupStream(selectedIds)
+    // no-transcript and whisper both use Whisper stream
+    const es = operationType === "cleanup"
+      ? createBatchCleanupStream(selectedIds)
+      : createBatchWhisperStream(selectedIds)
 
     es.addEventListener("start", (e) => {
       const data = JSON.parse(e.data)
@@ -228,14 +239,23 @@ export default function BatchOperations() {
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Operation Type Tabs */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={operationType === "no-transcript" ? "default" : "outline"}
+            onClick={() => setOperationType("no-transcript")}
+            disabled={isRunning}
+            className={operationType === "no-transcript" ? "bg-red-600 hover:bg-red-700" : ""}
+          >
+            <FileX className="h-4 w-4 mr-2" />
+            No Transcript
+          </Button>
           <Button
             variant={operationType === "whisper" ? "default" : "outline"}
             onClick={() => setOperationType("whisper")}
             disabled={isRunning}
           >
             <Mic className="h-4 w-4 mr-2" />
-            Whisper Transcription
+            Needs Whisper
           </Button>
           <Button
             variant={operationType === "cleanup" ? "default" : "outline"}
@@ -243,7 +263,7 @@ export default function BatchOperations() {
             disabled={isRunning}
           >
             <Sparkles className="h-4 w-4 mr-2" />
-            GPT Cleanup
+            Needs Cleanup
           </Button>
           <Button
             variant="ghost"
@@ -305,7 +325,7 @@ export default function BatchOperations() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">
-                {operationType === "whisper" ? "Whisper" : "Cleanup"} Batch
+                {operationType === "no-transcript" ? "No Transcript" : operationType === "whisper" ? "Needs Whisper" : "Needs Cleanup"} - Batch
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -424,8 +444,11 @@ export default function BatchOperations() {
               </div>
             ) : videos.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No videos need {operationType === "whisper" ? "transcription" : "cleanup"}.
-                All done!
+                {operationType === "no-transcript"
+                  ? "All videos have at least one transcript. All done!"
+                  : operationType === "whisper"
+                  ? "All videos have Whisper transcripts. All done!"
+                  : "All videos have been cleaned. All done!"}
               </div>
             ) : (
               <div className="space-y-2">
