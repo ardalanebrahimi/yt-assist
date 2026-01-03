@@ -10,6 +10,7 @@ import {
   FileText,
   Play,
   Mic,
+  Layers,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -300,6 +301,13 @@ export default function Library() {
               <p className="text-sm text-muted-foreground">Video Library</p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => window.location.hash = "batch"}
+              >
+                <Layers className="h-4 w-4 mr-2" />
+                Batch Operations
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => window.open("http://127.0.0.1:8000/api/export/jsonl")}

@@ -134,6 +134,50 @@
 
 ---
 
+## Milestone 4.6 – Batch Processing with Real-time Progress ⏳ IN PROGRESS
+
+### 4.6.1 Batch Operations UI
+- Dedicated batch operations page
+- Video selection with checkboxes
+- Pagination (10 videos per page)
+- Filter by status (needs whisper, needs cleanup, done)
+- Select/deselect all functionality
+
+### 4.6.2 Batch Plan Editor
+- Preview what will be processed vs skipped
+- Include/exclude individual videos before starting
+- Choose operations per video (Whisper, Cleanup, or both)
+- Cost and time estimates
+- Modify plan before execution
+
+### 4.6.3 Real-time Progress (SSE)
+- Server-Sent Events for live updates
+- Progress bar with percentage
+- Per-video status: pending → processing → done/skipped/failed
+- Current video highlighting
+- Cancel operation (stops after current video)
+
+### 4.6.4 Smart Skip Logic
+- Auto-skip videos that already have Whisper transcript
+- Auto-skip videos that already have cleaned transcript
+- Show skipped count in summary
+- Option to force re-process (override skip)
+
+### 4.6.5 Cleanup Iteration
+- Re-run cleanup with different settings
+- Compare original vs cleaned versions
+- Manual edit capability for cleaned transcripts
+
+### API Endpoints
+```
+GET  /batch/whisper/candidates    # List videos needing Whisper
+GET  /batch/cleanup/candidates    # List videos needing cleanup
+GET  /batch/whisper/run?video_ids=...  # Run Whisper with SSE progress
+GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
+```
+
+---
+
 ## Milestone 5 – YouTube Assistant Workflows + Experiments
 
 ### 5.1 Implement "New Video Wizard" Flow

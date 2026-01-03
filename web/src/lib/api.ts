@@ -334,3 +334,81 @@ export async function listDubs(videoId: string): Promise<DubFile[]> {
   const { data } = await api.get(`/dubbing/${videoId}/list`)
   return data.dubs || []
 }
+
+// Batch Processing API Types
+export interface BatchCandidate {
+  id: string
+  title: string
+  duration_seconds?: number
+  estimated_cost?: number
+  source?: string
+  char_count?: number
+}
+
+export interface BatchCandidatesResponse {
+  candidates: BatchCandidate[]
+  already_done: { id: string; title: string }[]
+  summary: {
+    total_candidates: number
+    already_done: number
+    total_duration_minutes?: number
+    estimated_total_cost: number
+  }
+}
+
+export interface BatchProgressEvent {
+  current: number
+  total: number
+  video_id: string
+  title: string
+  status: "pending" | "processing" | "done" | "skipped" | "failed"
+  message: string
+  completed: number
+  skipped: number
+  failed: number
+}
+
+export interface BatchCompleteEvent {
+  total: number
+  completed: number
+  skipped: number
+  failed: number
+  message: string
+}
+
+// Batch Processing API Functions
+export async function getBatchWhisperCandidates(): Promise<BatchCandidatesResponse> {
+  const { data } = await api.get("/batch/whisper/candidates")
+  return data
+}
+
+export async function getBatchCleanupCandidates(): Promise<BatchCandidatesResponse> {
+  const { data } = await api.get("/batch/cleanup/candidates")
+  return data
+}
+
+export function createBatchWhisperStream(
+  videoIds?: string[],
+  language: string = "fa"
+): EventSource {
+  const params = new URLSearchParams()
+  if (videoIds && videoIds.length > 0) {
+    params.set("video_ids", videoIds.join(","))
+  }
+  params.set("language", language)
+  return new EventSource(`${API_BASE}/batch/whisper/run?${params.toString()}`)
+}
+
+export function createBatchCleanupStream(
+  videoIds?: string[],
+  language: string = "fa",
+  preserveTimestamps: boolean = true
+): EventSource {
+  const params = new URLSearchParams()
+  if (videoIds && videoIds.length > 0) {
+    params.set("video_ids", videoIds.join(","))
+  }
+  params.set("language", language)
+  params.set("preserve_timestamps", preserveTimestamps.toString())
+  return new EventSource(`${API_BASE}/batch/cleanup/run?${params.toString()}`)
+}

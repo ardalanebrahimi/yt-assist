@@ -185,6 +185,41 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
 
 ---
 
+### Phase 4.5 – AI Dubbing (Bonus Feature)
+
+#### In Scope
+
+- Translate transcripts to other languages (EN, DE, FR, ES, AR, TR)
+- Generate dubbed audio using OpenAI TTS
+- Multiple voice options (6 voices)
+- Download dubbed audio files
+- Play audio in browser
+
+---
+
+### Phase 4.6 – Batch Processing with Real-time Progress
+
+#### In Scope
+
+- Batch Whisper transcription for multiple videos
+- Batch GPT cleanup for multiple videos
+- Real-time progress visibility via Server-Sent Events (SSE)
+- Video selection with checkboxes and pagination
+- Modify batch plan before execution (include/exclude videos)
+- Smart skip logic (don't re-process already done videos)
+- Cost and time estimates before starting
+- Cancel operation capability
+
+#### User Stories
+
+- "I want to transcribe all my old videos at once and see the progress"
+- "I want to clean up all my transcripts in one batch operation"
+- "I want to choose which videos to include in the batch"
+- "I want to see which videos will be skipped because they're already done"
+- "I want to stop the batch operation if something goes wrong"
+
+---
+
 ### Phase 5 – YouTube Assistant Workflows
 
 #### In Scope
