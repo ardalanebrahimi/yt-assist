@@ -12,5 +12,6 @@ httpx>=0.26.0
 # Whisper transcription (Milestone 4)
 openai>=1.0.0
 yt-dlp>=2024.1.0
-# pydub>=0.25.0  # Optional: for chunking files >25MB. Not compatible with Python 3.13+
+pydub>=0.25.0
+audioop-lts>=0.2.1  # Provides audioop for Python 3.13+
 google-auth-oauthlib>=1.0.0

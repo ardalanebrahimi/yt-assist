@@ -28,6 +28,8 @@ import {
   getYouTubeAuthStatus,
   listYouTubeCaptions,
   deleteYouTubeCaption,
+  createDub,
+  listDubs,
   type Video,
   type VideoDetail,
   type SyncStatus,
@@ -53,6 +55,7 @@ export default function Library() {
   const [saving, setSaving] = useState(false)
   const [ytAuthStatus, setYtAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null)
   const [authenticating, setAuthenticating] = useState(false)
+  const [dubbing, setDubbing] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -209,6 +212,27 @@ export default function Library() {
       alert(`Authentication failed: ${err.response?.data?.detail || err.message}`)
     } finally {
       setAuthenticating(false)
+    }
+  }
+
+  const handleCreateDub = async (videoId: string, targetLanguage: string, voice: string) => {
+    setDubbing(true)
+    try {
+      const result = await createDub(videoId, {
+        source_language: "fa",
+        target_language: targetLanguage,
+        voice: voice,
+      })
+      if (result.success) {
+        alert(`Dub created successfully! ${result.segments_count} segments, ${result.duration_seconds?.toFixed(0)}s duration`)
+      } else {
+        alert(`Dubbing failed: ${result.message}`)
+      }
+    } catch (err: any) {
+      console.error(err)
+      alert(`Dubbing failed: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setDubbing(false)
     }
   }
 
@@ -548,6 +572,9 @@ export default function Library() {
                 durationSeconds={selectedVideo.duration_seconds || 0}
                 fetchYouTubeCaptions={() => listYouTubeCaptions(selectedVideo.id)}
                 deleteYouTubeCaption={(captionId) => deleteYouTubeCaption(selectedVideo.id, captionId)}
+                onCreateDub={(targetLanguage, voice) => handleCreateDub(selectedVideo.id, targetLanguage, voice)}
+                fetchDubs={() => listDubs(selectedVideo.id)}
+                isDubbing={dubbing}
               />
 
               <div className="flex justify-end gap-2">

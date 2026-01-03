@@ -11,11 +11,13 @@ import {
   ChevronDown,
   ChevronUp,
   GitCompare,
-  Eye,
   Check,
+  Volume2,
+  Download,
+  Play,
 } from "lucide-react"
 import { TranscriptDiff } from "./TranscriptDiff"
-import type { Transcript } from "@/lib/api"
+import type { Transcript, DubFile } from "@/lib/api"
 
 interface YouTubeCaption {
   id: string
@@ -43,6 +45,10 @@ interface TranscriptManagerProps {
   // YouTube caption functions
   fetchYouTubeCaptions: () => Promise<YouTubeCaption[]>
   deleteYouTubeCaption: (captionId: string) => Promise<boolean>
+  // Dubbing functions
+  onCreateDub: (targetLanguage: string, voice: string) => Promise<void>
+  fetchDubs: () => Promise<DubFile[]>
+  isDubbing: boolean
 }
 
 const sourceIcons: Record<string, React.ReactNode> = {
@@ -73,6 +79,9 @@ export function TranscriptManager({
   durationSeconds,
   fetchYouTubeCaptions,
   deleteYouTubeCaption,
+  onCreateDub,
+  fetchDubs,
+  isDubbing,
 }: TranscriptManagerProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null)
   const [compareWith, setCompareWith] = useState<Transcript | null>(null)
@@ -82,6 +91,12 @@ export function TranscriptManager({
   const [deletingCaption, setDeletingCaption] = useState<string | null>(null)
   const [showYoutubeCaptions, setShowYoutubeCaptions] = useState(false)
   const [expandedTranscript, setExpandedTranscript] = useState<number | null>(null)
+  // Dubbing state
+  const [showDubbing, setShowDubbing] = useState(false)
+  const [dubs, setDubs] = useState<DubFile[]>([])
+  const [loadingDubs, setLoadingDubs] = useState(false)
+  const [selectedVoice, setSelectedVoice] = useState("nova")
+  const [selectedLanguage, setSelectedLanguage] = useState("en")
 
   // Sort transcripts: cleaned first, then whisper, then youtube
   const sortedTranscripts = [...transcripts].sort((a, b) => {
@@ -121,6 +136,42 @@ export function TranscriptManager({
       setDeletingCaption(null)
     }
   }
+
+  const loadDubs = async () => {
+    setLoadingDubs(true)
+    try {
+      const dubFiles = await fetchDubs()
+      setDubs(dubFiles)
+    } catch (err) {
+      console.error("Failed to load dubs:", err)
+    } finally {
+      setLoadingDubs(false)
+    }
+  }
+
+  const handleCreateDub = async () => {
+    await onCreateDub(selectedLanguage, selectedVoice)
+    // Reload dubs list after creation
+    await loadDubs()
+  }
+
+  const voices = [
+    { id: "alloy", name: "Alloy", desc: "Neutral" },
+    { id: "echo", name: "Echo", desc: "Male" },
+    { id: "fable", name: "Fable", desc: "Narrative" },
+    { id: "onyx", name: "Onyx", desc: "Deep male" },
+    { id: "nova", name: "Nova", desc: "Female" },
+    { id: "shimmer", name: "Shimmer", desc: "Clear female" },
+  ]
+
+  const targetLanguages = [
+    { code: "en", name: "English" },
+    { code: "de", name: "German" },
+    { code: "fr", name: "French" },
+    { code: "es", name: "Spanish" },
+    { code: "ar", name: "Arabic" },
+    { code: "tr", name: "Turkish" },
+  ]
 
   // If cleanup result is available, show the diff view
   if (cleanupResult) {
@@ -369,6 +420,151 @@ export function TranscriptManager({
           </div>
         )}
       </div>
+
+      {/* Dubbing Section */}
+      {sortedTranscripts.length > 0 && (
+        <div className="border-t pt-4">
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => {
+              if (!showDubbing) {
+                loadDubs()
+              }
+              setShowDubbing(!showDubbing)
+            }}
+          >
+            <h4 className="font-medium flex items-center gap-2">
+              <Volume2 className="h-4 w-4 text-blue-600" />
+              AI Dubbing
+            </h4>
+            <div className="flex items-center gap-2">
+              {showDubbing && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    loadDubs()
+                  }}
+                  disabled={loadingDubs}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingDubs ? "animate-spin" : ""}`} />
+                </Button>
+              )}
+              {showDubbing ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+
+          {showDubbing && (
+            <div className="mt-3 space-y-4">
+              {/* Create new dub */}
+              <div className="p-4 bg-muted/50 rounded-md space-y-3">
+                <div className="text-sm font-medium">Create New Dub</div>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="text-xs text-muted-foreground block mb-1">
+                      Target Language
+                    </label>
+                    <select
+                      value={selectedLanguage}
+                      onChange={(e) => setSelectedLanguage(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                    >
+                      {targetLanguages.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="text-xs text-muted-foreground block mb-1">
+                      Voice
+                    </label>
+                    <select
+                      value={selectedVoice}
+                      onChange={(e) => setSelectedVoice(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                    >
+                      {voices.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} ({voice.desc})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={handleCreateDub}
+                      disabled={isDubbing}
+                      size="sm"
+                    >
+                      <Volume2 className={`h-4 w-4 mr-1 ${isDubbing ? "animate-pulse" : ""}`} />
+                      {isDubbing ? "Creating..." : "Create Dub"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Existing dubs */}
+              {loadingDubs ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  Loading dubs...
+                </div>
+              ) : dubs.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4 bg-muted/30 rounded-md">
+                  No dubbed audio files yet
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Generated Dubs</div>
+                  {dubs.map((dub) => (
+                    <div
+                      key={dub.filename}
+                      className="flex items-center justify-between p-3 border rounded-md"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{dub.language.toUpperCase()}</Badge>
+                        <span className="text-sm font-mono">{dub.filename}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({(dub.size_bytes / 1024 / 1024).toFixed(1)} MB)
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const audio = new Audio(`http://127.0.0.1:8000${dub.url}`)
+                            audio.play()
+                          }}
+                          title="Play"
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            window.open(`http://127.0.0.1:8000${dub.url}`, "_blank")
+                          }}
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -255,3 +255,82 @@ export async function deleteYouTubeCaption(videoId: string, captionId: string): 
   const { data } = await api.delete(`/transcripts/${videoId}/youtube/captions/${captionId}`)
   return data.success
 }
+
+// Dubbing API Types
+export interface DubbingVoice {
+  id: string
+  description: string
+}
+
+export interface DubbingCostEstimate {
+  video_id: string
+  segments: number
+  source_characters: number
+  estimated_translated_characters: number
+  translation_cost_usd: number
+  tts_cost_usd: number
+  total_cost_usd: number
+}
+
+export interface DubbingResponse {
+  video_id: string
+  success: boolean
+  message: string
+  audio_url?: string
+  duration_seconds?: number
+  segments_count?: number
+  source_language?: string
+  target_language?: string
+}
+
+export interface DubFile {
+  filename: string
+  language: string
+  url: string
+  size_bytes: number
+}
+
+// Dubbing API Functions
+export async function getDubbingVoices(): Promise<{
+  voices: DubbingVoice[]
+  models: { id: string; description: string }[]
+  supported_target_languages: { code: string; name: string }[]
+}> {
+  const { data } = await api.get("/dubbing/voices")
+  return data
+}
+
+export async function getDubbingCostEstimate(
+  videoId: string,
+  targetLanguage: string = "en"
+): Promise<DubbingCostEstimate> {
+  const { data } = await api.get(`/dubbing/${videoId}/cost-estimate`, {
+    params: { target_language: targetLanguage },
+  })
+  return data
+}
+
+export async function createDub(
+  videoId: string,
+  options: {
+    source_language?: string
+    target_language?: string
+    voice?: string
+    model?: string
+    transcript_id?: number
+  } = {}
+): Promise<DubbingResponse> {
+  const { data } = await api.post(`/dubbing/${videoId}/create`, {
+    source_language: options.source_language || "fa",
+    target_language: options.target_language || "en",
+    voice: options.voice || "nova",
+    model: options.model || "tts-1",
+    transcript_id: options.transcript_id,
+  })
+  return data
+}
+
+export async function listDubs(videoId: string): Promise<DubFile[]> {
+  const { data } = await api.get(`/dubbing/${videoId}/list`)
+  return data.dubs || []
+}
