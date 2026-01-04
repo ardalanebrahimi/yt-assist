@@ -206,13 +206,14 @@ GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
 ### 5.2 Social Media Automation
 
 #### 5.2.1 LinkedIn Automation
-- Generate post from video transcript (key insights, tips)
+- Generate text posts from video transcript (key insights, tips)
 - Create carousel posts from video chapters
 - Schedule and auto-post via LinkedIn API
 - Track engagement metrics
 
 #### 5.2.2 Instagram Automation
 - Generate reels from video clips
+- Create stories (images + text overlays)
 - Create carousel posts with key points
 - Auto-generate captions and hashtags
 - Post via Instagram Graph API
@@ -223,19 +224,37 @@ GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
 - Daily/weekly content digests
 - Telegram Bot API integration
 
+#### 5.2.4 X.com (Twitter) Automation
+- Generate tweet threads from video content
+- Post short clips with captions
+- Auto-generate hashtags
+- Schedule and auto-post via X API v2
+- Track engagement metrics
+
 ### 5.3 Content Repurposing Pipeline
 
 #### 5.3.1 Video → Multi-Platform Content
 - Video → Blog post (Markdown/HTML)
 - Video → Twitter/X thread
+- Video → LinkedIn text posts
 - Video → LinkedIn article
 - Video → Newsletter content
+- Video → Instagram stories
 
 #### 5.3.2 Shorts/Clips Pipeline
 - Auto-detect highlight moments (high engagement potential)
 - Generate vertical video with burned-in captions
 - A/B test different hooks/thumbnails
 - Batch upload to YouTube Shorts, Instagram Reels, TikTok
+
+#### 5.3.3 AI-Generated Visual Content
+- Generate images from video key points using:
+  - Google NotebookLM
+  - Gemini image generation
+  - NanoBenaa (نانو‌بنا) for Persian content
+- Create quote cards and infographics
+- Generate thumbnails and social media images
+- Post images to Instagram stories, LinkedIn, X.com
 
 ### 5.4 AI Agents
 

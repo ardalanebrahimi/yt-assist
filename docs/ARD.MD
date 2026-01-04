@@ -395,10 +395,10 @@ Response: {
 
 | Platform | API | Auth | Features |
 |----------|-----|------|----------|
-| LinkedIn | LinkedIn Marketing API | OAuth 2.0 | Posts, articles, carousels |
-| Instagram | Instagram Graph API | Meta Business OAuth | Posts, reels, stories |
+| LinkedIn | LinkedIn Marketing API | OAuth 2.0 | Text posts, articles, carousels |
+| Instagram | Instagram Graph API | Meta Business OAuth | Posts, reels, stories, carousels |
 | Telegram | Telegram Bot API | Bot token | Messages, media, channels |
-| Twitter/X | Twitter API v2 | OAuth 2.0 | Tweets, threads |
+| X.com | X API v2 | OAuth 2.0 | Tweets, threads, media |
 
 **Data Models:**
 ```python
@@ -475,7 +475,47 @@ class VideoClip:
 
 ---
 
-### 2.11 AI Agents Service (Phase 5)
+### 2.11 Image Generation Service (Phase 5)
+
+**Responsibility:** Generate visual content from video transcripts for social media.
+
+**Technology:**
+- **Google NotebookLM** - Generate summaries and visual content
+- **Gemini** - Image generation from text prompts
+- **NanoBenaa (نانو‌بنا)** - Persian content image generation
+- **FFmpeg** - Image processing and composition
+
+**Functionality:**
+- Extract key quotes and insights from transcripts
+- Generate quote cards with branded styling
+- Create infographics from video chapters
+- Generate thumbnails with text overlays
+- Create Instagram story templates
+
+**Data Model:**
+```python
+class GeneratedImage:
+    id: int
+    video_id: str | None
+    source_text: str           # Quote or key point
+    image_type: str            # "quote_card", "infographic", "thumbnail", "story"
+    generator: str             # "gemini", "notebooklm", "nanobena"
+    output_path: str
+    platforms_posted: list[str]
+    created_at: datetime
+```
+
+**API Endpoints:**
+```
+POST /api/images/generate/quote        # Generate quote card
+POST /api/images/generate/infographic  # Generate infographic
+POST /api/images/generate/thumbnail    # Generate thumbnail
+GET  /api/images/{video_id}            # List generated images for video
+```
+
+---
+
+### 2.12 AI Agents Service (Phase 5)
 
 **Responsibility:** Autonomous agents for content management tasks.
 
@@ -531,7 +571,7 @@ GET  /api/agents/scheduler/calendar    # Get content calendar
 
 ---
 
-### 2.12 User Interface
+### 2.13 User Interface
 
 **Responsibility:** Web interface for all user interactions.
 

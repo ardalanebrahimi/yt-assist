@@ -253,13 +253,14 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
 **5.2 Social Media Automation:**
 
 4. **LinkedIn Automation**
-   - Generate posts from video transcripts (key insights, tips).
+   - Generate text posts from video transcripts (key insights, tips).
    - Create carousel posts from video chapters.
    - Schedule and auto-post via LinkedIn API.
    - Track engagement metrics.
 
 5. **Instagram Automation**
    - Generate reels from video clips.
+   - Create stories (images + text overlays).
    - Create carousel posts with key points.
    - Auto-generate captions and hashtags.
    - Post via Instagram Graph API.
@@ -270,33 +271,47 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
    - Daily/weekly content digests.
    - Telegram Bot API integration.
 
+7. **X.com (Twitter) Automation**
+   - Generate tweet threads from video content.
+   - Post short clips with captions.
+   - Auto-generate hashtags.
+   - Schedule and auto-post via X API v2.
+
 **5.3 Content Repurposing:**
 
-7. **Video → Multi-Platform Content**
+8. **Video → Multi-Platform Content**
    - Video → Blog post (Markdown/HTML).
    - Video → Twitter/X thread.
+   - Video → LinkedIn text posts.
    - Video → LinkedIn article.
    - Video → Newsletter content.
+   - Video → Instagram stories.
 
-8. **Shorts/Clips Pipeline**
+9. **Shorts/Clips Pipeline**
    - Auto-detect highlight moments.
    - Generate vertical video with burned-in captions.
    - Batch upload to YouTube Shorts, Instagram Reels, TikTok.
 
+10. **AI-Generated Visual Content**
+    - Generate images from video key points using NotebookLM, Gemini, NanoBenaa.
+    - Create quote cards and infographics.
+    - Generate thumbnails and social media images.
+    - Post images to Instagram stories, LinkedIn, X.com.
+
 **5.4 AI Agents:**
 
-9. **Comment Responder Agent**
-   - Monitor YouTube comments.
-   - Draft responses in your style.
-   - Queue for approval or auto-respond.
-   - Handle common questions via RAG.
+11. **Comment Responder Agent**
+    - Monitor YouTube comments.
+    - Draft responses in your style.
+    - Queue for approval or auto-respond.
+    - Handle common questions via RAG.
 
-10. **Analytics Reporter Agent**
+12. **Analytics Reporter Agent**
     - Weekly performance reports.
     - Identify trending topics in your niche.
     - Suggest content gaps and opportunities.
 
-11. **Content Scheduler Agent**
+13. **Content Scheduler Agent**
     - Optimal posting time recommendations.
     - Cross-platform scheduling.
     - Content calendar management.
