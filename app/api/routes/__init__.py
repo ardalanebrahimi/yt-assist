@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.routes import sync, videos, export, whisper, transcripts, dubbing, batch, rag, config
+from app.api.routes import sync, videos, export, whisper, transcripts, dubbing, batch, rag, config, wizard
 
 api_router = APIRouter()
 
@@ -15,3 +15,4 @@ api_router.include_router(dubbing.router, prefix="/dubbing", tags=["dubbing"])
 api_router.include_router(batch.router, prefix="/batch", tags=["batch"])
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
+api_router.include_router(wizard.router, prefix="/wizard", tags=["wizard"])

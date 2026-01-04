@@ -2,8 +2,9 @@ import { useState, useEffect } from "react"
 import Library from "./pages/Library"
 import BatchOperations from "./pages/BatchOperations"
 import QA from "./pages/QA"
+import ContentStudio from "./pages/ContentStudio"
 
-type Page = "library" | "batch" | "qa"
+type Page = "library" | "batch" | "qa" | "studio"
 
 function App() {
   const [page, setPage] = useState<Page>("library")
@@ -16,6 +17,8 @@ function App() {
         setPage("batch")
       } else if (hash === "qa") {
         setPage("qa")
+      } else if (hash === "studio") {
+        setPage("studio")
       } else {
         setPage("library")
       }
@@ -39,6 +42,10 @@ function App() {
 
   if (page === "qa") {
     return <QA />
+  }
+
+  if (page === "studio") {
+    return <ContentStudio />
   }
 
   return <Library />

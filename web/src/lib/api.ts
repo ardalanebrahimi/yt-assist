@@ -559,3 +559,172 @@ export async function clearIndex(): Promise<{ message: string }> {
   const { data } = await api.delete("/rag/index")
   return data
 }
+
+// Content Wizard API Types and Functions
+
+export interface RelatedVideo {
+  video_id: string
+  title: string
+  relevance_score: number
+  matching_segments: string[]
+}
+
+export interface OverlapCheckResponse {
+  has_overlap: boolean
+  overlap_score: number
+  related_videos: RelatedVideo[]
+  unique_angles: string[]
+  summary: string
+}
+
+export interface OutlineSection {
+  title: string
+  duration?: string
+  bullets: string[]
+}
+
+export interface OutlineResponse {
+  title: string
+  hook: string
+  sections: OutlineSection[]
+  call_to_action: string
+  estimated_duration: string
+  target_audience: string
+}
+
+export interface ScriptSection {
+  title: string
+  content: string
+}
+
+export interface ScriptResponse {
+  title: string
+  full_script: string
+  sections: ScriptSection[]
+  word_count: number
+  estimated_duration_minutes: number
+}
+
+export interface EpisodeSuggestion {
+  title: string
+  description: string
+  builds_on?: string
+  unique_value: string
+}
+
+export interface SeriesSuggestionResponse {
+  series_topic: string
+  existing_episodes: { video_id: string; title: string }[]
+  series_summary: string
+  existing_coverage: string
+  gaps_identified: string[]
+  suggestions: EpisodeSuggestion[]
+}
+
+export interface ClipCandidate {
+  video_id: string
+  video_title: string
+  start_time: string
+  end_time: string
+  hook: string
+  content_summary: string
+  why_it_works: string
+  suggested_title: string
+}
+
+export interface ClipCandidatesResponse {
+  video_id: string
+  clips: ClipCandidate[]
+}
+
+export interface QuickIdeaResponse {
+  topic: string
+  overlap_check: {
+    has_overlap: boolean
+    overlap_score: number
+    summary: string
+    related_videos: { video_id: string; title: string }[]
+  }
+  suggested_angle: string | null
+  outline: {
+    title: string
+    hook: string
+    sections: OutlineSection[]
+    call_to_action: string
+    target_audience: string
+  }
+}
+
+// Content Wizard API Functions
+
+export async function checkOverlap(
+  topic: string,
+  topK: number = 10
+): Promise<OverlapCheckResponse> {
+  const { data } = await api.post("/wizard/overlap-check", { topic, top_k: topK })
+  return data
+}
+
+export async function generateOutline(
+  topic: string,
+  options: {
+    angle?: string
+    target_duration?: string
+    include_rag_context?: boolean
+  } = {}
+): Promise<OutlineResponse> {
+  const { data } = await api.post("/wizard/generate-outline", {
+    topic,
+    angle: options.angle,
+    target_duration: options.target_duration || "10-15 minutes",
+    include_rag_context: options.include_rag_context ?? true,
+  })
+  return data
+}
+
+export async function generateScript(
+  outline: OutlineResponse,
+  options: {
+    style?: string
+    include_timestamps?: boolean
+  } = {}
+): Promise<ScriptResponse> {
+  const { data } = await api.post("/wizard/generate-script", {
+    title: outline.title,
+    hook: outline.hook,
+    sections: outline.sections,
+    call_to_action: outline.call_to_action,
+    target_audience: outline.target_audience,
+    style: options.style || "conversational",
+    include_timestamps: options.include_timestamps ?? true,
+  })
+  return data
+}
+
+export async function getSeriesSuggestions(
+  seriesTopic: string,
+  numSuggestions: number = 5
+): Promise<SeriesSuggestionResponse> {
+  const { data } = await api.post("/wizard/series-suggestions", {
+    series_topic: seriesTopic,
+    num_suggestions: numSuggestions,
+  })
+  return data
+}
+
+export async function getClipCandidates(
+  videoId: string,
+  numClips: number = 5
+): Promise<ClipCandidatesResponse> {
+  const { data } = await api.get(`/wizard/clip-candidates/${videoId}`, {
+    params: { num_clips: numClips },
+  })
+  return data
+}
+
+export async function generateQuickIdea(topic: string): Promise<QuickIdeaResponse> {
+  const { data } = await api.post("/wizard/quick-idea", null, {
+    params: { topic },
+  })
+  return data
+}
