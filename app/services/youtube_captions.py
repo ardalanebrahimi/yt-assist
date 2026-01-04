@@ -151,6 +151,7 @@ class YouTubeCaptionService:
         name: str = "",
         is_draft: bool = False,
         replace_existing: bool = True,
+        skip_check: bool = False,
     ) -> dict:
         """Upload a caption track to YouTube.
 
@@ -161,6 +162,7 @@ class YouTubeCaptionService:
             name: Caption track name (optional)
             is_draft: Whether to save as draft
             replace_existing: Delete existing caption with same language/name first
+            skip_check: Skip checking for existing captions (saves 50 quota units)
 
         Returns:
             Caption track information
@@ -169,8 +171,8 @@ class YouTubeCaptionService:
             youtube = self._get_youtube_service()
             caption_name = name or f"Whisper ({language})"
 
-            # Delete existing caption if replace_existing is True
-            if replace_existing:
+            # Delete existing caption if replace_existing is True (unless skip_check)
+            if replace_existing and not skip_check:
                 existing = self.list_captions(video_id)
                 for cap in existing:
                     if cap.get("language") == language and cap.get("name") == caption_name:

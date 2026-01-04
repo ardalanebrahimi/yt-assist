@@ -346,7 +346,8 @@ def _process_whisper_video(
                         transcript=result.raw_content,
                         language=language,
                         name=f"Whisper ({language})",
-                        replace_existing=True,
+                        replace_existing=False,  # Don't try to delete (saves quota)
+                        skip_check=True,  # Skip list_captions call (saves 50 units)
                     )
                     upload_status = " + uploaded to YouTube"
             except Exception as upload_err:
@@ -816,17 +817,35 @@ async def batch_cleanup(
 @router.get("/upload/candidates")
 def get_upload_candidates(
     language: str = Query("fa", description="Language code to check"),
+    check_youtube: bool = Query(False, description="Check YouTube for existing captions (costs 50 quota units per video)"),
     db: Session = Depends(get_db),
 ):
-    """Get videos that have transcripts but need YouTube upload."""
+    """Get videos that have transcripts ready for YouTube upload.
+
+    By default, shows ALL videos with transcripts (whisper or cleaned).
+    Set check_youtube=true to filter out videos that already have captions on YouTube
+    (warning: this costs 50 quota units per video).
+    """
     from app.services.youtube_captions import YouTubeCaptionService
 
-    # Check if YouTube is authenticated
-    try:
-        caption_service = YouTubeCaptionService()
-        if not caption_service.is_authenticated():
+    caption_service = None
+    if check_youtube:
+        try:
+            caption_service = YouTubeCaptionService()
+            if not caption_service.is_authenticated():
+                return {
+                    "error": "YouTube not authenticated (needed for check_youtube=true)",
+                    "candidates": [],
+                    "already_done": [],
+                    "summary": {
+                        "total_candidates": 0,
+                        "already_done": 0,
+                        "estimated_total_cost": 0,
+                    }
+                }
+        except Exception as e:
             return {
-                "error": "YouTube not authenticated",
+                "error": str(e),
                 "candidates": [],
                 "already_done": [],
                 "summary": {
@@ -835,17 +854,6 @@ def get_upload_candidates(
                     "estimated_total_cost": 0,
                 }
             }
-    except Exception as e:
-        return {
-            "error": str(e),
-            "candidates": [],
-            "already_done": [],
-            "summary": {
-                "total_candidates": 0,
-                "already_done": 0,
-                "estimated_total_cost": 0,
-            }
-        }
 
     # Get all videos with whisper or cleaned transcripts
     videos = db.query(Video).filter(Video.sync_status == "synced").all()
@@ -866,16 +874,18 @@ def get_upload_candidates(
         if not transcript:
             continue  # No transcript to upload
 
-        # Check if already uploaded to YouTube
-        try:
-            captions = caption_service.list_captions(video.id)
-            has_upload = any(
-                cap.get("language") == language and cap.get("track_kind") != "ASR"
-                for cap in captions
-            )
-        except Exception as e:
-            logger.warning(f"Failed to check captions for {video.id}: {e}")
-            has_upload = False
+        # Only check YouTube if requested (expensive!)
+        has_upload = False
+        if check_youtube and caption_service:
+            try:
+                captions = caption_service.list_captions(video.id)
+                has_upload = any(
+                    cap.get("language") == language and cap.get("track_kind") != "ASR"
+                    for cap in captions
+                )
+            except Exception as e:
+                logger.warning(f"Failed to check captions for {video.id}: {e}")
+                has_upload = False
 
         if has_upload:
             already_done.append({
@@ -889,7 +899,7 @@ def get_upload_candidates(
                 "duration_seconds": video.duration_seconds,
                 "source": transcript.source,
                 "char_count": len(transcript.raw_content),
-                "estimated_cost": 0,  # Upload is free
+                "estimated_cost": 0,  # Upload is free (400 quota units though)
             })
 
     return {
@@ -899,6 +909,7 @@ def get_upload_candidates(
             "total_candidates": len(candidates),
             "already_done": len(already_done),
             "estimated_total_cost": 0,
+            "note": "Shows all videos with transcripts. Use check_youtube=true to filter already uploaded (costs quota)." if not check_youtube else None,
         }
     }
 
@@ -908,10 +919,14 @@ def _process_youtube_upload(
     video_title: str,
     transcript_content: str,
     language: str,
+    skip_existing_check: bool = True,
 ) -> dict:
     """
     Upload transcript to YouTube for a single video.
     This function runs in a thread pool for parallel execution.
+
+    Args:
+        skip_existing_check: If True, skip checking for existing captions (saves ~100 quota units)
     """
     from app.services.youtube_captions import YouTubeCaptionService
 
@@ -926,30 +941,15 @@ def _process_youtube_upload(
                 "message": "YouTube not authenticated",
             }
 
-        # Check if already uploaded
-        try:
-            captions = caption_service.list_captions(video_id)
-            has_upload = any(
-                cap.get("language") == language and cap.get("track_kind") != "ASR"
-                for cap in captions
-            )
-            if has_upload:
-                return {
-                    "video_id": video_id,
-                    "title": video_title,
-                    "status": "skipped",
-                    "message": "Already has caption on YouTube",
-                }
-        except Exception:
-            pass  # Continue with upload attempt
-
-        # Upload caption
+        # Upload caption directly (skip_check=True saves quota)
+        # YouTube will replace if caption already exists with same language
         caption_service.upload_caption(
             video_id=video_id,
             transcript=transcript_content,
             language=language,
             name=f"Whisper ({language})",
-            replace_existing=True,
+            replace_existing=False,  # Don't try to delete first
+            skip_check=True,  # Skip list_captions call (saves 50 units)
         )
 
         return {
@@ -960,12 +960,23 @@ def _process_youtube_upload(
         }
 
     except Exception as e:
+        error_msg = str(e)
         logger.error(f"Error uploading caption for {video_id}: {e}")
+
+        # Check if it's a duplicate error (caption already exists)
+        if "already exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "skipped",
+                "message": "Caption already exists on YouTube",
+            }
+
         return {
             "video_id": video_id,
             "title": video_title,
             "status": "failed",
-            "message": str(e)[:100],
+            "message": error_msg[:100],
         }
 
 
