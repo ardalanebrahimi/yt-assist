@@ -1,5 +1,6 @@
 """Whisper transcription service using OpenAI API."""
 
+import json
 import logging
 import os
 import tempfile
@@ -11,6 +12,20 @@ import yt_dlp
 from openai import OpenAI
 
 from app.config import get_settings
+
+# Path to Whisper config file
+WHISPER_CONFIG_PATH = Path("data/whisper_config.json")
+
+
+def load_whisper_config() -> dict:
+    """Load Whisper configuration from JSON file."""
+    if WHISPER_CONFIG_PATH.exists():
+        try:
+            with open(WHISPER_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
 
 # Lazy import pydub - only needed for chunking large files
 # pydub has issues with Python 3.13+ due to audioop removal
@@ -76,6 +91,21 @@ class WhisperService:
         self.client = OpenAI(api_key=self.api_key)
         self.temp_dir = Path(tempfile.gettempdir()) / "yt_assist_whisper"
         self.temp_dir.mkdir(exist_ok=True)
+        self.config = load_whisper_config()
+
+    def _get_initial_prompt(self, language: str) -> Optional[str]:
+        """Get initial prompt for Whisper based on language and config.
+
+        The initial_prompt helps Whisper recognize expected vocabulary.
+
+        Args:
+            language: Language code
+
+        Returns:
+            Initial prompt string or None
+        """
+        prompts = self.config.get("initial_prompts", {})
+        return prompts.get(language)
 
     def transcribe_video(
         self, video_id: str, language: str = "fa"
@@ -233,14 +263,25 @@ class WhisperService:
             List of WhisperSegments
         """
         try:
+            # Get initial prompt for better vocabulary recognition
+            initial_prompt = self._get_initial_prompt(language)
+
             with open(audio_path, "rb") as audio_file:
-                response = self.client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language=language,
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"],
-                )
+                # Build API call parameters
+                api_params = {
+                    "model": "whisper-1",
+                    "file": audio_file,
+                    "language": language,
+                    "response_format": "verbose_json",
+                    "timestamp_granularities": ["segment"],
+                }
+
+                # Add initial prompt if configured
+                if initial_prompt:
+                    api_params["prompt"] = initial_prompt
+                    logger.info(f"Using initial prompt for {language}")
+
+                response = self.client.audio.transcriptions.create(**api_params)
 
             segments = []
             if hasattr(response, "segments") and response.segments:

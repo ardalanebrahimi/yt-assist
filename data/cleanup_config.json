@@ -1,0 +1,46 @@
+{
+  "speaker": {
+    "name": "اردلان",
+    "name_variations": ["اردالان", "اردلان"],
+    "introduction_pattern": "اردلان هستم"
+  },
+  "channel": {
+    "context": "Persian programming and software development tutorials for LinkedIn optimization and career growth",
+    "style": "informal, colloquial, conversational Persian",
+    "topics": ["LinkedIn", "programming", "career", "job hunting", "networking"]
+  },
+  "term_corrections": {
+    "ریکویتر": "ریکرویتر",
+    "ریکوییتر": "ریکرویتر",
+    "هیتهانتر": "هدهانتر",
+    "هیت هانتر": "هدهانتر",
+    "هیدر هانتر": "هدهانتر",
+    "دیولوپر": "دولوپر",
+    "نتوارک": "نتورک",
+    "لینکتین": "لینکدین",
+    "برنامه نویز": "برنامه‌نویس",
+    "برنامه نویست": "برنامه‌نویس"
+  },
+  "style_rules": [
+    "Keep possessive suffix 'مون' (e.g., پروفایلمون, کارامون) - do NOT expand to 'ما'",
+    "Keep informal verb forms: بکنیم, بکنن, می‌خوره",
+    "Keep spoken contractions: قراره, میشه, نمیشه",
+    "Keep 'یه' instead of 'یک'",
+    "Preserve original word order even if grammatically unusual",
+    "Use half-space (نیم‌فاصله) for compound words"
+  ],
+  "few_shot_examples": [
+    {
+      "input": "[00:00] سلام اردالان هم برنامه نویز و توی این ویدئو قرار کار بکنیم که بازید پروفایل لینکتینمون بیشتر بشه",
+      "output": "[00:00] سلام، اردلان هستم برنامه‌نویس و توی این ویدئو قراره کار بکنیم که بازدید پروفایل لینکدینمون بیشتر بشه"
+    },
+    {
+      "input": "[00:26] چرا باید پروفایل اون بیشتر دیده بشه احتمالا یه سری شرکت ها یه سری ریکویتر ها هستن که دنبال یه سری نیرو با مشخصات ما میگردن",
+      "output": "[00:26] چرا باید پروفایلمون بیشتر دیده بشه؟ احتمالا یه سری شرکت‌ها، یه سری ریکرویترها هستن که دنبال یه سری نیرو با مشخصات ما می‌گردن"
+    },
+    {
+      "input": "[00:54] اگر بین مثلا 500 تا 1000 تا دیولوپر آلمانی ریکویتر HR هیتهانتر آلمانی توی نتوارکمون نباشن",
+      "output": "[00:54] اگر بین مثلاً 500 تا 1000 تا دولوپر آلمانی، ریکرویتر، HR، هدهانتر آلمانی توی نتورک‌مون نباشن"
+    }
+  ]
+}

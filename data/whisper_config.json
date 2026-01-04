@@ -1,0 +1,10 @@
+{
+  "initial_prompts": {
+    "fa": "اردلان، برنامه‌نویس، لینکدین، نتورک، ریکرویتر، هدهانتر، دولوپر، پروفایل، کانکشن، HR، GitHub، Python، JavaScript، فریلنسر، استارتاپ، رزومه، پورتفولیو",
+    "en": "LinkedIn, recruiter, headhunter, developer, portfolio, GitHub, Python, JavaScript, freelancer, startup, resume, networking"
+  },
+  "notes": {
+    "fa": "Persian tech/career vocabulary - add more terms as needed",
+    "en": "English tech/career vocabulary"
+  }
+}

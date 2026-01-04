@@ -1,8 +1,10 @@
 """Transcript cleanup service using OpenAI GPT."""
 
+import json
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from openai import OpenAI
@@ -11,50 +13,31 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Common Whisper misheard terms in Persian tech content
-# Format: {wrong: correct}
-PERSIAN_TERM_CORRECTIONS = {
-    # Technical roles
-    "ریکویتر": "ریکرویتر",
-    "ریکوییتر": "ریکرویتر",
-    "رکرویتر": "ریکرویتر",
-    "هیتهانتر": "هدهانتر",
-    "هیت هانتر": "هدهانتر",
-    "هیدر هانتر": "هدهانتر",
-    "هید هانتر": "هدهانتر",
-    "دیولوپر": "دولوپر",
-    "دیو لوپر": "دولوپر",
-    "دیولپر": "دولوپر",
+# Path to cleanup config file
+CLEANUP_CONFIG_PATH = Path("data/cleanup_config.json")
 
-    # Tech terms
-    "نتوارک": "نتورک",
-    "نت وارک": "نتورک",
-    "نت ورک": "نتورک",
-    "لینکتین": "لینکدین",
-    "لینک تین": "لینکدین",
-    "لینکدن": "لینکدین",
-    "گیتهاب": "گیت‌هاب",
-    "گیت آب": "گیت‌هاب",
 
-    # Common speech patterns often misheard
-    "برنامه نویز": "برنامه‌نویس",
-    "برنامه نویست": "برنامه‌نویس",
-    "پروفایل اون": "پروفایلمون",  # Common context-specific fix
+def load_cleanup_config() -> dict:
+    """Load cleanup configuration from JSON file."""
+    if CLEANUP_CONFIG_PATH.exists():
+        try:
+            with open(CLEANUP_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load cleanup config: {e}")
+    return {}
 
-    # Filler fixes
-    "خب ": "",  # Remove standalone "khob"
-}
 
-# Regex patterns for more complex replacements
-PERSIAN_REGEX_CORRECTIONS = [
-    # Fix "اردالان هم" -> "اردلان هستم" (speaker introduction)
-    (r"اردالان\s+هم\s+برنامه", "اردلان هستم برنامه"),
-    # Fix spacing issues with half-space words
-    (r"برنامه\s+نویس", "برنامه‌نویس"),
-    (r"می\s+گردن", "می‌گردن"),
-    (r"می\s+خوره", "می‌خوره"),
-    (r"نمی\s+خوره", "نمی‌خوره"),
-]
+def save_cleanup_config(config: dict) -> bool:
+    """Save cleanup configuration to JSON file."""
+    try:
+        CLEANUP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CLEANUP_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save cleanup config: {e}")
+        return False
 
 
 @dataclass
@@ -81,29 +64,61 @@ class TranscriptCleanupService:
         if not self.api_key:
             raise ValueError("OpenAI API key is required for transcript cleanup")
         self.client = OpenAI(api_key=self.api_key)
+        self.config = load_cleanup_config()
 
-    def _preprocess_persian(self, text: str) -> str:
+    def reload_config(self):
+        """Reload configuration from file."""
+        self.config = load_cleanup_config()
+
+    def _preprocess_text(self, text: str, language_code: str) -> str:
         """
-        Pre-process Persian text to fix common Whisper transcription errors.
-        This runs BEFORE sending to GPT to ensure consistent fixes.
+        Pre-process text to fix common transcription errors using config.
 
         Args:
             text: Raw transcript text
+            language_code: Language code
 
         Returns:
-            Pre-processed text with common errors fixed
+            Pre-processed text with term corrections applied
         """
         result = text
 
-        # Apply simple string replacements
-        for wrong, correct in PERSIAN_TERM_CORRECTIONS.items():
+        # Apply term corrections from config
+        term_corrections = self.config.get("term_corrections", {})
+        for wrong, correct in term_corrections.items():
             result = result.replace(wrong, correct)
 
-        # Apply regex-based corrections
-        for pattern, replacement in PERSIAN_REGEX_CORRECTIONS:
-            result = re.sub(pattern, replacement, result)
+        # Apply speaker name correction if configured
+        speaker = self.config.get("speaker", {})
+        if speaker.get("name") and speaker.get("introduction_pattern"):
+            for variation in speaker.get("name_variations", []):
+                if variation != speaker["name"]:
+                    # Fix speaker introduction pattern
+                    pattern = rf"{variation}\s+هم\s+برنامه"
+                    replacement = f"{speaker['introduction_pattern']} برنامه"
+                    result = re.sub(pattern, replacement, result)
+
+        # Common half-space fixes for Persian
+        if language_code == "fa":
+            result = re.sub(r"برنامه\s+نویس", "برنامه‌نویس", result)
+            result = re.sub(r"می\s+([گخشکب])", r"می‌\1", result)  # می + verb
+            result = re.sub(r"نمی\s+([گخشکب])", r"نمی‌\1", result)  # نمی + verb
 
         return result
+
+    def _build_few_shot_prompt(self) -> str:
+        """Build few-shot examples section from config."""
+        examples = self.config.get("few_shot_examples", [])
+        if not examples:
+            return ""
+
+        parts = ["\n\nEXAMPLES OF CORRECT CLEANUP (follow this style exactly):"]
+        for i, ex in enumerate(examples[:5], 1):  # Max 5 examples
+            parts.append(f"\nExample {i}:")
+            parts.append(f"Input: {ex.get('input', '')}")
+            parts.append(f"Output: {ex.get('output', '')}")
+
+        return "\n".join(parts)
 
     def cleanup_transcript(
         self,
@@ -131,41 +146,57 @@ class TranscriptCleanupService:
             CleanupResult or None if cleanup failed
         """
         try:
-            # Pre-process to fix common Whisper errors (before GPT)
-            if language_code == "fa":
-                transcript = self._preprocess_persian(transcript)
+            # Pre-process to fix common errors using config
+            transcript = self._preprocess_text(transcript, language_code)
 
             # Build the prompt based on language
             language_name = self._get_language_name(language_code)
 
-            # Build context section
+            # Build context section from config and parameters
             context_parts = []
+
+            # Add channel context from config
+            channel_config = self.config.get("channel", {})
+            if channel_config.get("context"):
+                context_parts.append(f"Channel: {channel_config['context']}")
+            if channel_config.get("style"):
+                context_parts.append(f"Speaking Style: {channel_config['style']}")
+
+            # Add speaker info from config
+            speaker_config = self.config.get("speaker", {})
+            if speaker_config.get("name"):
+                context_parts.append(f"Speaker Name: {speaker_config['name']}")
+
+            # Add video-specific context
             if video_title:
                 context_parts.append(f"Video Title: {video_title}")
             if video_description:
-                # Truncate long descriptions
                 desc = video_description[:500] + "..." if len(video_description) > 500 else video_description
                 context_parts.append(f"Video Description: {desc}")
             if video_tags:
                 context_parts.append(f"Tags: {', '.join(video_tags[:15])}")
             if channel_context:
-                context_parts.append(f"Channel Context: {channel_context}")
+                context_parts.append(f"Additional Context: {channel_context}")
 
             context_section = ""
             if context_parts:
                 context_section = f"""
-VIDEO CONTEXT (use this to understand domain-specific terminology):
+VIDEO CONTEXT:
 {chr(10).join(context_parts)}
-
-Based on this context, pay special attention to:
-- Technical terms related to the video topic
-- Names, brands, or proper nouns mentioned
-- Domain-specific vocabulary that might be mistranscribed
 """
 
-            # Persian-specific instructions
+            # Build style rules from config
+            style_rules = self.config.get("style_rules", [])
+            style_rules_section = ""
+            if style_rules:
+                style_rules_section = "\nSTYLE RULES (MUST FOLLOW):\n" + "\n".join(f"- {rule}" for rule in style_rules)
+
+            # Build few-shot examples section
+            few_shot_section = self._build_few_shot_prompt()
+
+            # Persian-specific instructions (as fallback if no config)
             persian_rules = ""
-            if language_code == "fa":
+            if language_code == "fa" and not style_rules:
                 persian_rules = """
 PERSIAN-SPECIFIC RULES:
 - Keep colloquial endings: "پروفایلمون" NOT "پروفایل ما", "کارامون" NOT "کارهای ما"
@@ -181,10 +212,7 @@ Your task is to clean up and fix the transcript while preserving the original me
 {context_section}
 CRITICAL RULES:
 1. PRESERVE THE ORIGINAL TONE AND STYLE - if the speaker uses informal/colloquial language, KEEP IT INFORMAL. Do NOT formalize the language.
-2. Keep English technical terms in ENGLISH ALPHABET (not transliterated to {language_name}). Examples:
-   - Keep "code" as "code" not "کد"
-   - Keep "clean code" as "clean code" not "کلین کد"
-   - Keep "function", "class", "variable", "Git", "GitHub", "Python", etc. in English
+2. Keep English technical terms in ENGLISH ALPHABET (not transliterated to {language_name}).
 3. Fix spelling errors in {language_name} words only
 4. Add proper punctuation where clearly needed
 5. Fix obvious speech-to-text errors based on context
@@ -192,10 +220,13 @@ CRITICAL RULES:
 7. Keep the same line structure (one segment per line)
 8. Do NOT translate or change the language direction
 9. Do NOT add new content or remove meaningful content
-10. Do NOT change informal speech patterns to formal ones (e.g., keep "میخوام" don't change to "می‌خواهم")
+10. Do NOT change informal speech patterns to formal ones
 11. Remove only obvious filler sounds like "اوم", "آه" but keep natural speech patterns
+{style_rules_section}
 {persian_rules}
-IMPORTANT: The speaker's personality and speaking style should be preserved. If they speak casually, the output should be casual.
+{few_shot_section}
+
+IMPORTANT: Follow the examples above exactly. The speaker's personality and speaking style MUST be preserved.
 
 Output ONLY the cleaned transcript, nothing else."""
 
