@@ -1,7 +1,7 @@
 # Ardalan YouTube AI Assistant – ARD
 
-**Version:** v1.0
-**Last Updated:** 2026-01-01
+**Version:** v2.0
+**Last Updated:** 2026-01-04
 
 ---
 
@@ -387,7 +387,151 @@ Response: {
 
 ---
 
-### 2.9 User Interface
+### 2.9 Social Media Integration Layer (Phase 5)
+
+**Responsibility:** Manage connections and posting to social media platforms.
+
+**Platforms:**
+
+| Platform | API | Auth | Features |
+|----------|-----|------|----------|
+| LinkedIn | LinkedIn Marketing API | OAuth 2.0 | Posts, articles, carousels |
+| Instagram | Instagram Graph API | Meta Business OAuth | Posts, reels, stories |
+| Telegram | Telegram Bot API | Bot token | Messages, media, channels |
+| Twitter/X | Twitter API v2 | OAuth 2.0 | Tweets, threads |
+
+**Data Models:**
+```python
+class SocialAccount:
+    id: int
+    platform: str           # "linkedin", "instagram", "telegram", "twitter"
+    account_name: str
+    credentials: dict       # Encrypted OAuth tokens
+    is_active: bool
+    created_at: datetime
+
+class SocialPost:
+    id: int
+    video_id: str           # Source video (optional)
+    platform: str
+    content: str
+    media_urls: list[str]
+    status: str             # "draft", "scheduled", "posted", "failed"
+    scheduled_at: datetime | None
+    posted_at: datetime | None
+    engagement: dict        # likes, comments, shares (fetched later)
+    created_at: datetime
+```
+
+**API Endpoints:**
+```
+GET  /api/social/accounts              # List connected accounts
+POST /api/social/accounts/connect      # OAuth flow start
+POST /api/social/posts/generate        # Generate post from video
+POST /api/social/posts/schedule        # Schedule a post
+POST /api/social/posts/publish         # Publish immediately
+GET  /api/social/posts/{id}/analytics  # Get engagement metrics
+```
+
+---
+
+### 2.10 Shorts/Clips Generation Service (Phase 5)
+
+**Responsibility:** Auto-generate short-form video clips from long videos.
+
+**Technology:**
+- **Video Processing:** FFmpeg
+- **Caption Rendering:** FFmpeg drawtext or ASS subtitles
+- **Highlight Detection:** GPT analysis of transcript for high-impact moments
+
+**Functionality:**
+- Analyze transcript for engaging moments (hooks, key insights, emotional peaks)
+- Extract video segment with proper aspect ratio (9:16 for shorts)
+- Burn in captions with styling (font, position, animations)
+- Generate thumbnail suggestions
+- Upload to YouTube Shorts, Instagram Reels
+
+**API Endpoints:**
+```
+POST /api/shorts/analyze/{video_id}    # Find clip candidates
+POST /api/shorts/generate              # Generate short video
+POST /api/shorts/upload                # Upload to platform
+GET  /api/shorts/{video_id}/clips      # List generated clips
+```
+
+**Data Model:**
+```python
+class VideoClip:
+    id: int
+    video_id: str
+    start_time: float
+    end_time: float
+    hook_text: str
+    transcript_segment: str
+    output_path: str | None
+    platforms_posted: list[str]
+    created_at: datetime
+```
+
+---
+
+### 2.11 AI Agents Service (Phase 5)
+
+**Responsibility:** Autonomous agents for content management tasks.
+
+**Agent Types:**
+
+1. **Comment Responder Agent**
+   - Polls YouTube comments API periodically
+   - Uses RAG to find relevant content for answers
+   - Drafts responses in Ardalan's style
+   - Queue for approval (optional auto-respond)
+
+2. **Analytics Reporter Agent**
+   - Scheduled weekly/monthly reports
+   - Fetches YouTube Analytics API data
+   - Identifies trends and opportunities
+   - Sends summary via email/Telegram
+
+3. **Content Scheduler Agent**
+   - Manages cross-platform posting calendar
+   - Suggests optimal posting times
+   - Handles timezone conversions
+   - Sends reminders for content gaps
+
+**Data Models:**
+```python
+class AgentTask:
+    id: int
+    agent_type: str         # "comment_responder", "analytics", "scheduler"
+    status: str             # "pending", "running", "completed", "failed"
+    input_data: dict
+    output_data: dict | None
+    created_at: datetime
+    completed_at: datetime | None
+
+class CommentResponse:
+    id: int
+    comment_id: str
+    video_id: str
+    original_comment: str
+    draft_response: str
+    status: str             # "pending_approval", "approved", "posted", "rejected"
+    posted_at: datetime | None
+```
+
+**API Endpoints:**
+```
+POST /api/agents/comments/scan         # Scan for new comments
+GET  /api/agents/comments/pending      # Get responses awaiting approval
+POST /api/agents/comments/{id}/approve # Approve and post response
+POST /api/agents/analytics/report      # Generate analytics report
+GET  /api/agents/scheduler/calendar    # Get content calendar
+```
+
+---
+
+### 2.12 User Interface
 
 **Responsibility:** Web interface for all user interactions.
 

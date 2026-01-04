@@ -1,8 +1,8 @@
 # Ardalan YouTube AI Assistant – PRD
 
-**Version:** v1.0
+**Version:** v2.0
 **Owner:** Ardalan
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-04
 
 ---
 
@@ -41,10 +41,13 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
 ### Non-Goals (for now)
 
 - No public-facing user interface or user accounts.
-- No direct publishing to YouTube (upload/publish is manual).
-- No automated video editing.
 - No monetization features.
 - No multi-user collaboration; this is single-user (Ardalan) only.
+
+### Previously Non-Goals, Now In Scope
+
+- ~~No direct publishing to YouTube~~ → Now supported (caption upload, shorts posting)
+- ~~No automated video editing~~ → Now supported (shorts generation with captions)
 
 ---
 
@@ -220,11 +223,11 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
 
 ---
 
-### Phase 5 – YouTube Assistant Workflows
+### Phase 5 – Content Automation & AI Assistants
 
 #### In Scope
 
-**End-to-end flows:**
+**5.1 Content Creation Assistants:**
 
 1. **New Video Wizard**
    - Input: idea or topic.
@@ -239,19 +242,66 @@ The product is not a public SaaS; it is a private productivity tool for Ardalan 
      - Current episodes summary.
      - Proposed next 3–5 episodes with titles and main bullets.
 
-3. **Clip Finder**
+3. **Clip Finder / Shorts Generator**
    - Input: video id.
    - Output:
      - 3–10 suggested clip ranges (timestamp start–end).
      - One-sentence "hook" text for each clip.
+   - Auto-generate vertical shorts with captions.
+   - Post directly to YouTube Shorts.
 
-4. **Strategic Suggestions**
-   - Input: "Analyze my channel for gaps / opportunities."
-   - Output:
-     - High-level observations.
-     - Possible next themes/series.
+**5.2 Social Media Automation:**
 
-**Multi-model comparison:**
+4. **LinkedIn Automation**
+   - Generate posts from video transcripts (key insights, tips).
+   - Create carousel posts from video chapters.
+   - Schedule and auto-post via LinkedIn API.
+   - Track engagement metrics.
+
+5. **Instagram Automation**
+   - Generate reels from video clips.
+   - Create carousel posts with key points.
+   - Auto-generate captions and hashtags.
+   - Post via Instagram Graph API.
+
+6. **Telegram Channel**
+   - Auto-post video announcements.
+   - Share transcripts and summaries.
+   - Daily/weekly content digests.
+   - Telegram Bot API integration.
+
+**5.3 Content Repurposing:**
+
+7. **Video → Multi-Platform Content**
+   - Video → Blog post (Markdown/HTML).
+   - Video → Twitter/X thread.
+   - Video → LinkedIn article.
+   - Video → Newsletter content.
+
+8. **Shorts/Clips Pipeline**
+   - Auto-detect highlight moments.
+   - Generate vertical video with burned-in captions.
+   - Batch upload to YouTube Shorts, Instagram Reels, TikTok.
+
+**5.4 AI Agents:**
+
+9. **Comment Responder Agent**
+   - Monitor YouTube comments.
+   - Draft responses in your style.
+   - Queue for approval or auto-respond.
+   - Handle common questions via RAG.
+
+10. **Analytics Reporter Agent**
+    - Weekly performance reports.
+    - Identify trending topics in your niche.
+    - Suggest content gaps and opportunities.
+
+11. **Content Scheduler Agent**
+    - Optimal posting time recommendations.
+    - Cross-platform scheduling.
+    - Content calendar management.
+
+**5.5 Multi-model comparison:**
 
 - Option to choose:
   - "Use my model."
