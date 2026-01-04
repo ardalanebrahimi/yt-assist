@@ -63,6 +63,7 @@ export default function BatchOperations() {
   const [progress, setProgress] = useState({ current: 0, total: 0, completed: 0, skipped: 0, failed: 0 })
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null)
   const [autoUpload, setAutoUpload] = useState(true)
+  const [parallelWorkers, setParallelWorkers] = useState(2)
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)
@@ -136,8 +137,8 @@ export default function BatchOperations() {
 
     // no-transcript and whisper both use Whisper stream
     const es = operationType === "cleanup"
-      ? createBatchCleanupStream(selectedIds)
-      : createBatchWhisperStream(selectedIds, "fa", autoUpload)
+      ? createBatchCleanupStream(selectedIds, "fa", true, parallelWorkers)
+      : createBatchWhisperStream(selectedIds, "fa", autoUpload, parallelWorkers)
 
     es.addEventListener("start", (e) => {
       const data = JSON.parse(e.data)
@@ -407,6 +408,20 @@ export default function BatchOperations() {
                   <span>Auto-upload to YouTube</span>
                 </label>
               )}
+              {/* Parallel workers selector */}
+              <label className="flex items-center gap-2 text-sm">
+                <span>Parallel:</span>
+                <select
+                  value={parallelWorkers}
+                  onChange={(e) => setParallelWorkers(Number(e.target.value))}
+                  className="h-8 px-2 rounded border border-gray-300 bg-background text-sm"
+                >
+                  <option value={1}>1 (Sequential)</option>
+                  <option value={2}>2 workers</option>
+                  <option value={3}>3 workers</option>
+                  <option value={4}>4 workers</option>
+                </select>
+              </label>
             </>
           ) : (
             <Button variant="destructive" onClick={cancelBatch}>

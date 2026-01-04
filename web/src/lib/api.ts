@@ -421,7 +421,8 @@ export async function getBatchCleanupCandidates(): Promise<BatchCandidatesRespon
 export function createBatchWhisperStream(
   videoIds?: string[],
   language: string = "fa",
-  autoUpload: boolean = true
+  autoUpload: boolean = true,
+  parallel: number = 2
 ): EventSource {
   const params = new URLSearchParams()
   if (videoIds && videoIds.length > 0) {
@@ -429,13 +430,15 @@ export function createBatchWhisperStream(
   }
   params.set("language", language)
   params.set("auto_upload", autoUpload.toString())
+  params.set("parallel", parallel.toString())
   return new EventSource(`${API_BASE}/batch/whisper/run?${params.toString()}`)
 }
 
 export function createBatchCleanupStream(
   videoIds?: string[],
   language: string = "fa",
-  preserveTimestamps: boolean = true
+  preserveTimestamps: boolean = true,
+  parallel: number = 2
 ): EventSource {
   const params = new URLSearchParams()
   if (videoIds && videoIds.length > 0) {
@@ -443,6 +446,7 @@ export function createBatchCleanupStream(
   }
   params.set("language", language)
   params.set("preserve_timestamps", preserveTimestamps.toString())
+  params.set("parallel", parallel.toString())
   return new EventSource(`${API_BASE}/batch/cleanup/run?${params.toString()}`)
 }
 

@@ -1,5 +1,6 @@
 """Batch processing API routes with Server-Sent Events for progress."""
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -11,9 +12,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.config import get_settings
 from app.db.models import Video, Transcript
+from app.db.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Default parallel workers for batch operations
+DEFAULT_PARALLEL_WORKERS = 2
 
 
 @router.get("/status/summary")
@@ -238,14 +243,113 @@ def get_cleanup_candidates(
     }
 
 
+def _process_whisper_video(
+    video_id: str,
+    video_title: str,
+    video_duration: int,
+    language: str,
+    auto_upload: bool,
+    openai_api_key: str,
+) -> dict:
+    """
+    Process a single video with Whisper transcription.
+    This function runs in a thread pool for parallel execution.
+
+    Returns a dict with status and message for SSE updates.
+    """
+    from app.services.whisper import WhisperService
+    from app.services.youtube_captions import YouTubeCaptionService
+
+    # Create a new database session for this thread
+    db = SessionLocal()
+
+    try:
+        # Check if already has whisper transcript
+        has_whisper = db.query(Transcript).filter(
+            Transcript.video_id == video_id,
+            Transcript.source == "whisper"
+        ).first() is not None
+
+        if has_whisper:
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "skipped",
+                "message": "Already has Whisper transcript",
+            }
+
+        # Initialize services
+        whisper_service = WhisperService(api_key=openai_api_key)
+
+        # Transcribe
+        result = whisper_service.transcribe_video(video_id, language=language)
+
+        if not result:
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "failed",
+                "message": "Transcription failed",
+            }
+
+        # Save to database
+        transcript = Transcript(
+            video_id=video_id,
+            language_code=result.language_code,
+            is_auto_generated=False,
+            source="whisper",
+            raw_content=result.raw_content,
+            clean_content=result.clean_content,
+        )
+        db.add(transcript)
+        db.commit()
+
+        # Auto-upload to YouTube if enabled
+        upload_status = ""
+        if auto_upload:
+            try:
+                caption_service = YouTubeCaptionService()
+                if caption_service.is_authenticated():
+                    caption_service.upload_caption(
+                        video_id=video_id,
+                        transcript=result.raw_content,
+                        language=language,
+                        name=f"Whisper ({language})",
+                        replace_existing=True,
+                    )
+                    upload_status = " + uploaded to YouTube"
+            except Exception as upload_err:
+                logger.error(f"Failed to upload caption for {video_id}: {upload_err}")
+                upload_status = " (upload failed)"
+
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "done",
+            "message": f"Transcription complete{upload_status}",
+        }
+
+    except Exception as e:
+        logger.error(f"Error transcribing {video_id}: {e}")
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "failed",
+            "message": str(e)[:100],
+        }
+    finally:
+        db.close()
+
+
 @router.get("/whisper/run")
 async def batch_whisper(
     video_ids: Optional[str] = Query(None, description="Comma-separated video IDs, or empty for all candidates"),
     language: str = Query("fa", description="Language code"),
     auto_upload: bool = Query(True, description="Automatically upload to YouTube after transcription"),
+    parallel: int = Query(DEFAULT_PARALLEL_WORKERS, description="Number of parallel workers (1-4)", ge=1, le=4),
     db: Session = Depends(get_db),
 ):
-    """Run Whisper transcription on multiple videos with SSE progress updates."""
+    """Run Whisper transcription on multiple videos with SSE progress updates and parallel processing."""
     settings = get_settings()
 
     if not settings.openai_api_key:
@@ -269,145 +373,120 @@ async def batch_whisper(
             if not has_whisper:
                 videos.append(v)
 
-    async def generate():
-        from app.services.whisper import WhisperService
-        from app.services.youtube_captions import YouTubeCaptionService
+    # Prepare video data for parallel processing
+    video_data = [
+        {
+            "video_id": v.id,
+            "video_title": v.title,
+            "video_duration": v.duration_seconds or 0,
+        }
+        for v in videos
+    ]
 
-        total = len(videos)
+    async def generate():
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        total = len(video_data)
         completed = 0
         skipped = 0
         failed = 0
+        processed = 0
 
         yield sse_message("start", {
             "total": total,
-            "message": f"Starting Whisper transcription for {total} videos" + (" (with auto-upload)" if auto_upload else "")
+            "parallel": parallel,
+            "message": f"Starting Whisper transcription for {total} videos with {parallel} parallel workers" +
+                       (" (with auto-upload)" if auto_upload else "")
         })
 
-        try:
-            whisper_service = WhisperService(api_key=settings.openai_api_key)
-        except Exception as e:
-            yield sse_message("error", {"message": f"Failed to initialize Whisper: {str(e)}"})
+        if total == 0:
+            yield sse_message("complete", {
+                "total": 0,
+                "completed": 0,
+                "skipped": 0,
+                "failed": 0,
+                "message": "No videos to process"
+            })
             return
 
-        # Initialize YouTube caption service if auto_upload is enabled
-        caption_service = None
-        if auto_upload:
-            try:
-                caption_service = YouTubeCaptionService()
-                # Check if authenticated
-                if not caption_service.is_authenticated():
-                    logger.warning("YouTube not authenticated, auto-upload will be skipped")
-                    caption_service = None
-            except Exception as e:
-                logger.warning(f"Failed to initialize YouTube caption service: {e}")
-                caption_service = None
-
-        for i, video in enumerate(videos):
-            # Check again if already has whisper (in case of concurrent runs)
-            has_whisper = db.query(Transcript).filter(
-                Transcript.video_id == video.id,
-                Transcript.source == "whisper"
-            ).first() is not None
-
-            if has_whisper:
-                skipped += 1
-                yield sse_message("progress", {
-                    "current": i + 1,
-                    "total": total,
-                    "video_id": video.id,
-                    "title": video.title,
-                    "status": "skipped",
-                    "message": "Already has Whisper transcript",
-                    "completed": completed,
-                    "skipped": skipped,
-                    "failed": failed,
-                })
-                continue
-
+        # Send initial processing status for first N videos
+        processing_videos = video_data[:parallel]
+        for vd in processing_videos:
             yield sse_message("progress", {
-                "current": i + 1,
+                "current": processed + 1,
                 "total": total,
-                "video_id": video.id,
-                "title": video.title,
+                "video_id": vd["video_id"],
+                "title": vd["video_title"],
                 "status": "processing",
-                "message": f"Transcribing ({video.duration_seconds or 0}s)...",
+                "message": f"Transcribing ({vd['video_duration']}s)...",
                 "completed": completed,
                 "skipped": skipped,
                 "failed": failed,
             })
 
-            try:
-                result = whisper_service.transcribe_video(video.id, language=language)
+        # Process videos in parallel using ThreadPoolExecutor
+        loop = asyncio.get_event_loop()
 
-                if result:
-                    # Save to database
-                    transcript = Transcript(
-                        video_id=video.id,
-                        language_code=result.language_code,
-                        is_auto_generated=False,
-                        source="whisper",
-                        raw_content=result.raw_content,
-                        clean_content=result.clean_content,
-                    )
-                    db.add(transcript)
-                    db.commit()
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            # Submit all tasks
+            future_to_video = {
+                executor.submit(
+                    _process_whisper_video,
+                    vd["video_id"],
+                    vd["video_title"],
+                    vd["video_duration"],
+                    language,
+                    auto_upload,
+                    settings.openai_api_key,
+                ): vd
+                for vd in video_data
+            }
 
-                    # Auto-upload to YouTube if enabled and service is available
-                    upload_status = ""
-                    if caption_service:
-                        try:
-                            caption_service.upload_caption(
-                                video_id=video.id,
-                                transcript=result.raw_content,
-                                language=language,
-                                name=f"Whisper ({language})",
-                                replace_existing=True,
-                            )
-                            upload_status = " + uploaded to YouTube"
-                        except Exception as upload_err:
-                            logger.error(f"Failed to upload caption for {video.id}: {upload_err}")
-                            upload_status = " (upload failed)"
+            # Process results as they complete
+            for future in as_completed(future_to_video):
+                vd = future_to_video[future]
+                processed += 1
 
-                    completed += 1
+                try:
+                    result = future.result()
+                    status = result.get("status", "failed")
+
+                    if status == "done":
+                        completed += 1
+                    elif status == "skipped":
+                        skipped += 1
+                    else:
+                        failed += 1
+
                     yield sse_message("progress", {
-                        "current": i + 1,
+                        "current": processed,
                         "total": total,
-                        "video_id": video.id,
-                        "title": video.title,
-                        "status": "done",
-                        "message": f"Transcription complete{upload_status}",
+                        "video_id": result.get("video_id", vd["video_id"]),
+                        "title": result.get("title", vd["video_title"]),
+                        "status": status,
+                        "message": result.get("message", ""),
                         "completed": completed,
                         "skipped": skipped,
                         "failed": failed,
                     })
-                else:
+
+                except Exception as e:
                     failed += 1
+                    logger.error(f"Error processing {vd['video_id']}: {e}")
                     yield sse_message("progress", {
-                        "current": i + 1,
+                        "current": processed,
                         "total": total,
-                        "video_id": video.id,
-                        "title": video.title,
+                        "video_id": vd["video_id"],
+                        "title": vd["video_title"],
                         "status": "failed",
-                        "message": "Transcription failed",
+                        "message": str(e)[:100],
                         "completed": completed,
                         "skipped": skipped,
                         "failed": failed,
                     })
 
-            except Exception as e:
-                failed += 1
-                logger.error(f"Error transcribing {video.id}: {e}")
-                yield sse_message("progress", {
-                    "current": i + 1,
-                    "total": total,
-                    "video_id": video.id,
-                    "title": video.title,
-                    "status": "failed",
-                    "message": str(e)[:100],
-                    "completed": completed,
-                    "skipped": skipped,
-                    "failed": failed,
-                })
+                # Small delay to allow SSE to flush
+                await asyncio.sleep(0.01)
 
         yield sse_message("complete", {
             "total": total,
@@ -420,14 +499,109 @@ async def batch_whisper(
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+def _process_cleanup_video(
+    video_id: str,
+    video_title: str,
+    video_description: str,
+    video_tags: list,
+    transcript_content: str,
+    language: str,
+    preserve_timestamps: bool,
+    openai_api_key: str,
+) -> dict:
+    """
+    Process a single video with GPT cleanup.
+    This function runs in a thread pool for parallel execution.
+
+    Returns a dict with status and message for SSE updates.
+    """
+    import re
+    from app.services.transcript_cleanup import TranscriptCleanupService
+
+    # Create a new database session for this thread
+    db = SessionLocal()
+
+    try:
+        # Check if already has cleaned transcript
+        has_cleaned = db.query(Transcript).filter(
+            Transcript.video_id == video_id,
+            Transcript.source == "cleaned"
+        ).first() is not None
+
+        if has_cleaned:
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "skipped",
+                "message": "Already has cleaned transcript",
+            }
+
+        # Initialize service
+        service = TranscriptCleanupService(api_key=openai_api_key)
+
+        # Clean transcript
+        result = service.cleanup_transcript(
+            transcript=transcript_content,
+            language_code=language,
+            preserve_timestamps=preserve_timestamps,
+            video_title=video_title,
+            video_description=video_description,
+            video_tags=video_tags,
+            channel_context="Persian programming and software development tutorials",
+        )
+
+        if not result:
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "failed",
+                "message": "Cleanup failed",
+            }
+
+        # Save to database
+        transcript = Transcript(
+            video_id=video_id,
+            language_code=language,
+            is_auto_generated=False,
+            source="cleaned",
+            raw_content=result.cleaned,
+            clean_content=re.sub(
+                r"\[\d{1,2}:\d{2}(:\d{2})?\]\s*",
+                "",
+                result.cleaned,
+            ),
+        )
+        db.add(transcript)
+        db.commit()
+
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "done",
+            "message": f"Cleanup complete ({result.changes_summary})",
+        }
+
+    except Exception as e:
+        logger.error(f"Error cleaning {video_id}: {e}")
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "failed",
+            "message": str(e)[:100],
+        }
+    finally:
+        db.close()
+
+
 @router.get("/cleanup/run")
 async def batch_cleanup(
     video_ids: Optional[str] = Query(None, description="Comma-separated video IDs, or empty for all candidates"),
     language: str = Query("fa", description="Language code"),
     preserve_timestamps: bool = Query(True),
+    parallel: int = Query(DEFAULT_PARALLEL_WORKERS, description="Number of parallel workers (1-4)", ge=1, le=4),
     db: Session = Depends(get_db),
 ):
-    """Run GPT cleanup on multiple videos with SSE progress updates."""
+    """Run GPT cleanup on multiple videos with SSE progress updates and parallel processing."""
     settings = get_settings()
 
     if not settings.openai_api_key:
@@ -451,7 +625,14 @@ async def batch_cleanup(
                     .first()
                 )
                 if transcript:
-                    videos_data.append((video, transcript))
+                    videos_data.append({
+                        "video_id": video.id,
+                        "video_title": video.title,
+                        "video_description": video.description or "",
+                        "video_tags": video.tags or [],
+                        "transcript_content": transcript.raw_content,
+                        "char_count": len(transcript.raw_content),
+                    })
     else:
         # Get all candidates (have transcript but no cleaned version)
         all_videos = (
@@ -477,130 +658,118 @@ async def batch_cleanup(
                     .first()
                 )
                 if transcript:
-                    videos_data.append((video, transcript))
+                    videos_data.append({
+                        "video_id": video.id,
+                        "video_title": video.title,
+                        "video_description": video.description or "",
+                        "video_tags": video.tags or [],
+                        "transcript_content": transcript.raw_content,
+                        "char_count": len(transcript.raw_content),
+                    })
 
     async def generate():
-        from app.services.transcript_cleanup import TranscriptCleanupService
-        import re
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         total = len(videos_data)
         completed = 0
         skipped = 0
         failed = 0
+        processed = 0
 
         yield sse_message("start", {
             "total": total,
-            "message": f"Starting cleanup for {total} videos"
+            "parallel": parallel,
+            "message": f"Starting cleanup for {total} videos with {parallel} parallel workers"
         })
 
-        try:
-            service = TranscriptCleanupService(api_key=settings.openai_api_key)
-        except Exception as e:
-            yield sse_message("error", {"message": f"Failed to initialize cleanup service: {str(e)}"})
+        if total == 0:
+            yield sse_message("complete", {
+                "total": 0,
+                "completed": 0,
+                "skipped": 0,
+                "failed": 0,
+                "message": "No videos to process"
+            })
             return
 
-        for i, (video, source_transcript) in enumerate(videos_data):
-            # Check again if already has cleaned (in case of concurrent runs)
-            has_cleaned = db.query(Transcript).filter(
-                Transcript.video_id == video.id,
-                Transcript.source == "cleaned"
-            ).first() is not None
-
-            if has_cleaned:
-                skipped += 1
-                yield sse_message("progress", {
-                    "current": i + 1,
-                    "total": total,
-                    "video_id": video.id,
-                    "title": video.title,
-                    "status": "skipped",
-                    "message": "Already has cleaned transcript",
-                    "completed": completed,
-                    "skipped": skipped,
-                    "failed": failed,
-                })
-                continue
-
+        # Send initial processing status for first N videos
+        processing_videos = videos_data[:parallel]
+        for vd in processing_videos:
             yield sse_message("progress", {
-                "current": i + 1,
+                "current": processed + 1,
                 "total": total,
-                "video_id": video.id,
-                "title": video.title,
+                "video_id": vd["video_id"],
+                "title": vd["video_title"],
                 "status": "processing",
-                "message": f"Cleaning transcript ({len(source_transcript.raw_content)} chars)...",
+                "message": f"Cleaning transcript ({vd['char_count']} chars)...",
                 "completed": completed,
                 "skipped": skipped,
                 "failed": failed,
             })
 
-            try:
-                result = service.cleanup_transcript(
-                    transcript=source_transcript.raw_content,
-                    language_code=language,
-                    preserve_timestamps=preserve_timestamps,
-                    video_title=video.title,
-                    video_description=video.description or "",
-                    video_tags=video.tags or [],
-                    channel_context="Persian programming and software development tutorials",
-                )
+        # Process videos in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            # Submit all tasks
+            future_to_video = {
+                executor.submit(
+                    _process_cleanup_video,
+                    vd["video_id"],
+                    vd["video_title"],
+                    vd["video_description"],
+                    vd["video_tags"],
+                    vd["transcript_content"],
+                    language,
+                    preserve_timestamps,
+                    settings.openai_api_key,
+                ): vd
+                for vd in videos_data
+            }
 
-                if result:
-                    # Save to database
-                    transcript = Transcript(
-                        video_id=video.id,
-                        language_code=language,
-                        is_auto_generated=False,
-                        source="cleaned",
-                        raw_content=result.cleaned,
-                        clean_content=re.sub(
-                            r"\[\d{1,2}:\d{2}(:\d{2})?\]\s*",
-                            "",
-                            result.cleaned,
-                        ),
-                    )
-                    db.add(transcript)
-                    db.commit()
+            # Process results as they complete
+            for future in as_completed(future_to_video):
+                vd = future_to_video[future]
+                processed += 1
 
-                    completed += 1
+                try:
+                    result = future.result()
+                    status = result.get("status", "failed")
+
+                    if status == "done":
+                        completed += 1
+                    elif status == "skipped":
+                        skipped += 1
+                    else:
+                        failed += 1
+
                     yield sse_message("progress", {
-                        "current": i + 1,
+                        "current": processed,
                         "total": total,
-                        "video_id": video.id,
-                        "title": video.title,
-                        "status": "done",
-                        "message": f"Cleanup complete ({result.changes_summary})",
+                        "video_id": result.get("video_id", vd["video_id"]),
+                        "title": result.get("title", vd["video_title"]),
+                        "status": status,
+                        "message": result.get("message", ""),
                         "completed": completed,
                         "skipped": skipped,
                         "failed": failed,
                     })
-                else:
+
+                except Exception as e:
                     failed += 1
+                    logger.error(f"Error processing {vd['video_id']}: {e}")
                     yield sse_message("progress", {
-                        "current": i + 1,
+                        "current": processed,
                         "total": total,
-                        "video_id": video.id,
-                        "title": video.title,
+                        "video_id": vd["video_id"],
+                        "title": vd["video_title"],
                         "status": "failed",
-                        "message": "Cleanup failed",
+                        "message": str(e)[:100],
                         "completed": completed,
                         "skipped": skipped,
                         "failed": failed,
                     })
 
-            except Exception as e:
-                failed += 1
-                logger.error(f"Error cleaning {video.id}: {e}")
-                yield sse_message("progress", {
-                    "current": i + 1,
-                    "total": total,
-                    "video_id": video.id,
-                    "title": video.title,
-                    "status": "failed",
-                    "message": str(e)[:100],
-                    "completed": completed,
-                    "skipped": skipped,
-                    "failed": failed,
-                })
+                # Small delay to allow SSE to flush
+                await asyncio.sleep(0.01)
 
         yield sse_message("complete", {
             "total": total,
