@@ -1,6 +1,7 @@
 """Transcript cleanup service using OpenAI GPT."""
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -9,6 +10,51 @@ from openai import OpenAI
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Common Whisper misheard terms in Persian tech content
+# Format: {wrong: correct}
+PERSIAN_TERM_CORRECTIONS = {
+    # Technical roles
+    "ریکویتر": "ریکرویتر",
+    "ریکوییتر": "ریکرویتر",
+    "رکرویتر": "ریکرویتر",
+    "هیتهانتر": "هدهانتر",
+    "هیت هانتر": "هدهانتر",
+    "هیدر هانتر": "هدهانتر",
+    "هید هانتر": "هدهانتر",
+    "دیولوپر": "دولوپر",
+    "دیو لوپر": "دولوپر",
+    "دیولپر": "دولوپر",
+
+    # Tech terms
+    "نتوارک": "نتورک",
+    "نت وارک": "نتورک",
+    "نت ورک": "نتورک",
+    "لینکتین": "لینکدین",
+    "لینک تین": "لینکدین",
+    "لینکدن": "لینکدین",
+    "گیتهاب": "گیت‌هاب",
+    "گیت آب": "گیت‌هاب",
+
+    # Common speech patterns often misheard
+    "برنامه نویز": "برنامه‌نویس",
+    "برنامه نویست": "برنامه‌نویس",
+    "پروفایل اون": "پروفایلمون",  # Common context-specific fix
+
+    # Filler fixes
+    "خب ": "",  # Remove standalone "khob"
+}
+
+# Regex patterns for more complex replacements
+PERSIAN_REGEX_CORRECTIONS = [
+    # Fix "اردالان هم" -> "اردلان هستم" (speaker introduction)
+    (r"اردالان\s+هم\s+برنامه", "اردلان هستم برنامه"),
+    # Fix spacing issues with half-space words
+    (r"برنامه\s+نویس", "برنامه‌نویس"),
+    (r"می\s+گردن", "می‌گردن"),
+    (r"می\s+خوره", "می‌خوره"),
+    (r"نمی\s+خوره", "نمی‌خوره"),
+]
 
 
 @dataclass
@@ -36,6 +82,29 @@ class TranscriptCleanupService:
             raise ValueError("OpenAI API key is required for transcript cleanup")
         self.client = OpenAI(api_key=self.api_key)
 
+    def _preprocess_persian(self, text: str) -> str:
+        """
+        Pre-process Persian text to fix common Whisper transcription errors.
+        This runs BEFORE sending to GPT to ensure consistent fixes.
+
+        Args:
+            text: Raw transcript text
+
+        Returns:
+            Pre-processed text with common errors fixed
+        """
+        result = text
+
+        # Apply simple string replacements
+        for wrong, correct in PERSIAN_TERM_CORRECTIONS.items():
+            result = result.replace(wrong, correct)
+
+        # Apply regex-based corrections
+        for pattern, replacement in PERSIAN_REGEX_CORRECTIONS:
+            result = re.sub(pattern, replacement, result)
+
+        return result
+
     def cleanup_transcript(
         self,
         transcript: str,
@@ -62,6 +131,10 @@ class TranscriptCleanupService:
             CleanupResult or None if cleanup failed
         """
         try:
+            # Pre-process to fix common Whisper errors (before GPT)
+            if language_code == "fa":
+                transcript = self._preprocess_persian(transcript)
+
             # Build the prompt based on language
             language_name = self._get_language_name(language_code)
 
@@ -90,6 +163,19 @@ Based on this context, pay special attention to:
 - Domain-specific vocabulary that might be mistranscribed
 """
 
+            # Persian-specific instructions
+            persian_rules = ""
+            if language_code == "fa":
+                persian_rules = """
+PERSIAN-SPECIFIC RULES:
+- Keep colloquial endings: "پروفایلمون" NOT "پروفایل ما", "کارامون" NOT "کارهای ما"
+- Keep informal verb forms: "بکنیم", "بکنن", "می‌خوره" - do NOT formalize
+- Keep spoken contractions: "قراره" not "قرار است", "میشه" not "می‌شود"
+- Use half-space (نیم‌فاصله) for compound words: "برنامه‌نویس", "می‌گردن"
+- Preserve original word order even if grammatically informal
+- Do NOT change "یه" to "یک" - keep the spoken form
+"""
+
             system_prompt = f"""You are a professional transcript editor for {language_name} content.
 Your task is to clean up and fix the transcript while preserving the original meaning AND STYLE.
 {context_section}
@@ -108,7 +194,7 @@ CRITICAL RULES:
 9. Do NOT add new content or remove meaningful content
 10. Do NOT change informal speech patterns to formal ones (e.g., keep "میخوام" don't change to "می‌خواهم")
 11. Remove only obvious filler sounds like "اوم", "آه" but keep natural speech patterns
-
+{persian_rules}
 IMPORTANT: The speaker's personality and speaking style should be preserved. If they speak casually, the output should be casual.
 
 Output ONLY the cleaned transcript, nothing else."""
