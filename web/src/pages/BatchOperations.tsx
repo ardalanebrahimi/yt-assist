@@ -16,6 +16,7 @@ import {
   ChevronRight,
   RefreshCw,
   FileX,
+  Upload,
 } from "lucide-react"
 import {
   getBatchWhisperCandidates,
@@ -24,13 +25,15 @@ import {
   createBatchCleanupStream,
   getVideoStatusSummary,
   getNoTranscriptCandidates,
+  getUploadCandidates,
+  createBatchUploadStream,
   type BatchCandidate,
   type BatchCandidatesResponse,
   type BatchProgressEvent,
   type VideoStatusSummary,
 } from "@/lib/api"
 
-type OperationType = "no-transcript" | "whisper" | "cleanup"
+type OperationType = "no-transcript" | "whisper" | "cleanup" | "upload"
 type VideoStatus = "pending" | "processing" | "done" | "skipped" | "failed" | "excluded"
 
 interface VideoItem extends BatchCandidate {
@@ -76,6 +79,8 @@ export default function BatchOperations() {
             return getBatchWhisperCandidates()
           case "cleanup":
             return getBatchCleanupCandidates()
+          case "upload":
+            return getUploadCandidates()
         }
       }
       const [data, statusData] = await Promise.all([
@@ -135,10 +140,16 @@ export default function BatchOperations() {
       message: undefined,
     })))
 
-    // no-transcript and whisper both use Whisper stream
-    const es = operationType === "cleanup"
-      ? createBatchCleanupStream(selectedIds, "fa", true, parallelWorkers)
-      : createBatchWhisperStream(selectedIds, "fa", autoUpload, parallelWorkers)
+    // Select the appropriate stream based on operation type
+    let es: EventSource
+    if (operationType === "cleanup") {
+      es = createBatchCleanupStream(selectedIds, "fa", true, parallelWorkers)
+    } else if (operationType === "upload") {
+      es = createBatchUploadStream(selectedIds, "fa", parallelWorkers)
+    } else {
+      // no-transcript and whisper both use Whisper stream
+      es = createBatchWhisperStream(selectedIds, "fa", autoUpload, parallelWorkers)
+    }
 
     es.addEventListener("start", (e) => {
       const data = JSON.parse(e.data)
@@ -268,6 +279,15 @@ export default function BatchOperations() {
             Needs Cleanup
           </Button>
           <Button
+            variant={operationType === "upload" ? "default" : "outline"}
+            onClick={() => setOperationType("upload")}
+            disabled={isRunning}
+            className={operationType === "upload" ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Needs YouTube Upload
+          </Button>
+          <Button
             variant="ghost"
             size="icon"
             onClick={loadCandidates}
@@ -327,7 +347,10 @@ export default function BatchOperations() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">
-                {operationType === "no-transcript" ? "No Transcript" : operationType === "whisper" ? "Needs Whisper" : "Needs Cleanup"} - Batch
+                {operationType === "no-transcript" ? "No Transcript" :
+                 operationType === "whisper" ? "Needs Whisper" :
+                 operationType === "cleanup" ? "Needs Cleanup" :
+                 "Needs YouTube Upload"} - Batch
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -397,7 +420,7 @@ export default function BatchOperations() {
                 Deselect All
               </Button>
               {/* Auto-upload toggle (only for Whisper operations) */}
-              {operationType !== "cleanup" && (
+              {(operationType === "no-transcript" || operationType === "whisper") && (
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
@@ -476,7 +499,9 @@ export default function BatchOperations() {
                   ? "All videos have at least one transcript. All done!"
                   : operationType === "whisper"
                   ? "All videos have Whisper transcripts. All done!"
-                  : "All videos have been cleaned. All done!"}
+                  : operationType === "cleanup"
+                  ? "All videos have been cleaned. All done!"
+                  : "All transcripts have been uploaded to YouTube. All done!"}
               </div>
             ) : (
               <div className="space-y-2">
@@ -534,6 +559,11 @@ export default function BatchOperations() {
                               {status.has_cleaned && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
                                   Cleaned
+                                </Badge>
+                              )}
+                              {status.uploaded_to_yt && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  Uploaded
                                 </Badge>
                               )}
                               {!status.has_youtube && !status.has_whisper && (

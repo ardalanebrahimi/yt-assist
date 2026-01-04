@@ -385,6 +385,8 @@ export interface VideoStatusSummary {
     no_transcript: number
     needs_whisper: number
     needs_cleanup: number
+    needs_upload: number
+    uploaded_to_youtube: number
     fully_processed: number
   }
   videos: {
@@ -394,6 +396,7 @@ export interface VideoStatusSummary {
     has_youtube: boolean
     has_whisper: boolean
     has_cleaned: boolean
+    uploaded_to_yt: boolean | null
   }[]
 }
 
@@ -448,6 +451,25 @@ export function createBatchCleanupStream(
   params.set("preserve_timestamps", preserveTimestamps.toString())
   params.set("parallel", parallel.toString())
   return new EventSource(`${API_BASE}/batch/cleanup/run?${params.toString()}`)
+}
+
+export async function getUploadCandidates(): Promise<BatchCandidatesResponse> {
+  const { data } = await api.get("/batch/upload/candidates")
+  return data
+}
+
+export function createBatchUploadStream(
+  videoIds?: string[],
+  language: string = "fa",
+  parallel: number = 2
+): EventSource {
+  const params = new URLSearchParams()
+  if (videoIds && videoIds.length > 0) {
+    params.set("video_ids", videoIds.join(","))
+  }
+  params.set("language", language)
+  params.set("parallel", parallel.toString())
+  return new EventSource(`${API_BASE}/batch/upload/run?${params.toString()}`)
 }
 
 // RAG API Types and Functions

@@ -21,8 +21,27 @@ router = APIRouter()
 DEFAULT_PARALLEL_WORKERS = 2
 
 
+def _check_youtube_caption_exists(video_id: str, language: str = "fa") -> bool:
+    """Check if a video has a caption uploaded to YouTube for the given language."""
+    try:
+        from app.services.youtube_captions import YouTubeCaptionService
+        service = YouTubeCaptionService()
+        if not service.is_authenticated():
+            return False
+        captions = service.list_captions(video_id)
+        # Check if there's a non-auto-generated caption for this language
+        for cap in captions:
+            if cap.get("language") == language and cap.get("track_kind") != "ASR":
+                return True
+        return False
+    except Exception as e:
+        logger.warning(f"Failed to check YouTube captions for {video_id}: {e}")
+        return False
+
+
 @router.get("/status/summary")
 def get_video_status_summary(
+    check_youtube_uploads: bool = Query(False, description="Check YouTube for uploaded captions (slower)"),
     db: Session = Depends(get_db),
 ):
     """Get summary of all video states (transcripts, cleanup status, etc.)."""
@@ -37,6 +56,8 @@ def get_video_status_summary(
         "no_transcript": 0,
         "needs_whisper": 0,
         "needs_cleanup": 0,
+        "needs_upload": 0,
+        "uploaded_to_youtube": 0,
         "fully_processed": 0,
     }
 
@@ -50,6 +71,11 @@ def get_video_status_summary(
         has_cleaned = any(t.source == "cleaned" for t in transcripts)
         has_any = len(transcripts) > 0
 
+        # Check if uploaded to YouTube (only if requested, as it's slow)
+        uploaded_to_yt = False
+        if check_youtube_uploads and (has_whisper or has_cleaned):
+            uploaded_to_yt = _check_youtube_caption_exists(video.id)
+
         if has_youtube:
             summary["with_youtube_subtitle"] += 1
         if has_whisper:
@@ -62,6 +88,10 @@ def get_video_status_summary(
             summary["needs_whisper"] += 1
         if has_any and not has_cleaned:
             summary["needs_cleanup"] += 1
+        if (has_whisper or has_cleaned) and not uploaded_to_yt and check_youtube_uploads:
+            summary["needs_upload"] += 1
+        if uploaded_to_yt:
+            summary["uploaded_to_youtube"] += 1
         if has_whisper and has_cleaned:
             summary["fully_processed"] += 1
 
@@ -72,6 +102,7 @@ def get_video_status_summary(
             "has_youtube": has_youtube,
             "has_whisper": has_whisper,
             "has_cleaned": has_cleaned,
+            "uploaded_to_yt": uploaded_to_yt if check_youtube_uploads else None,
         })
 
     return {
@@ -777,6 +808,330 @@ async def batch_cleanup(
             "skipped": skipped,
             "failed": failed,
             "message": f"Batch complete: {completed} cleaned, {skipped} skipped, {failed} failed"
+        })
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.get("/upload/candidates")
+def get_upload_candidates(
+    language: str = Query("fa", description="Language code to check"),
+    db: Session = Depends(get_db),
+):
+    """Get videos that have transcripts but need YouTube upload."""
+    from app.services.youtube_captions import YouTubeCaptionService
+
+    # Check if YouTube is authenticated
+    try:
+        caption_service = YouTubeCaptionService()
+        if not caption_service.is_authenticated():
+            return {
+                "error": "YouTube not authenticated",
+                "candidates": [],
+                "already_done": [],
+                "summary": {
+                    "total_candidates": 0,
+                    "already_done": 0,
+                    "estimated_total_cost": 0,
+                }
+            }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "candidates": [],
+            "already_done": [],
+            "summary": {
+                "total_candidates": 0,
+                "already_done": 0,
+                "estimated_total_cost": 0,
+            }
+        }
+
+    # Get all videos with whisper or cleaned transcripts
+    videos = db.query(Video).filter(Video.sync_status == "synced").all()
+
+    candidates = []
+    already_done = []
+
+    for video in videos:
+        # Get best transcript (prefer cleaned, then whisper)
+        transcript = (
+            db.query(Transcript)
+            .filter(Transcript.video_id == video.id)
+            .filter(Transcript.source.in_(["cleaned", "whisper"]))
+            .order_by((Transcript.source == "cleaned").desc())
+            .first()
+        )
+
+        if not transcript:
+            continue  # No transcript to upload
+
+        # Check if already uploaded to YouTube
+        try:
+            captions = caption_service.list_captions(video.id)
+            has_upload = any(
+                cap.get("language") == language and cap.get("track_kind") != "ASR"
+                for cap in captions
+            )
+        except Exception as e:
+            logger.warning(f"Failed to check captions for {video.id}: {e}")
+            has_upload = False
+
+        if has_upload:
+            already_done.append({
+                "id": video.id,
+                "title": video.title,
+            })
+        else:
+            candidates.append({
+                "id": video.id,
+                "title": video.title,
+                "duration_seconds": video.duration_seconds,
+                "source": transcript.source,
+                "char_count": len(transcript.raw_content),
+                "estimated_cost": 0,  # Upload is free
+            })
+
+    return {
+        "candidates": candidates,
+        "already_done": already_done,
+        "summary": {
+            "total_candidates": len(candidates),
+            "already_done": len(already_done),
+            "estimated_total_cost": 0,
+        }
+    }
+
+
+def _process_youtube_upload(
+    video_id: str,
+    video_title: str,
+    transcript_content: str,
+    language: str,
+) -> dict:
+    """
+    Upload transcript to YouTube for a single video.
+    This function runs in a thread pool for parallel execution.
+    """
+    from app.services.youtube_captions import YouTubeCaptionService
+
+    try:
+        caption_service = YouTubeCaptionService()
+
+        if not caption_service.is_authenticated():
+            return {
+                "video_id": video_id,
+                "title": video_title,
+                "status": "failed",
+                "message": "YouTube not authenticated",
+            }
+
+        # Check if already uploaded
+        try:
+            captions = caption_service.list_captions(video_id)
+            has_upload = any(
+                cap.get("language") == language and cap.get("track_kind") != "ASR"
+                for cap in captions
+            )
+            if has_upload:
+                return {
+                    "video_id": video_id,
+                    "title": video_title,
+                    "status": "skipped",
+                    "message": "Already has caption on YouTube",
+                }
+        except Exception:
+            pass  # Continue with upload attempt
+
+        # Upload caption
+        caption_service.upload_caption(
+            video_id=video_id,
+            transcript=transcript_content,
+            language=language,
+            name=f"Whisper ({language})",
+            replace_existing=True,
+        )
+
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "done",
+            "message": "Uploaded to YouTube",
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading caption for {video_id}: {e}")
+        return {
+            "video_id": video_id,
+            "title": video_title,
+            "status": "failed",
+            "message": str(e)[:100],
+        }
+
+
+@router.get("/upload/run")
+async def batch_upload(
+    video_ids: Optional[str] = Query(None, description="Comma-separated video IDs, or empty for all candidates"),
+    language: str = Query("fa", description="Language code"),
+    parallel: int = Query(DEFAULT_PARALLEL_WORKERS, description="Number of parallel workers (1-4)", ge=1, le=4),
+    db: Session = Depends(get_db),
+):
+    """Upload transcripts to YouTube for multiple videos with SSE progress updates."""
+    from app.services.youtube_captions import YouTubeCaptionService
+
+    # Check YouTube authentication
+    try:
+        caption_service = YouTubeCaptionService()
+        if not caption_service.is_authenticated():
+            async def error_stream():
+                yield sse_message("error", {"message": "YouTube not authenticated. Please authenticate first."})
+            return StreamingResponse(error_stream(), media_type="text/event-stream")
+    except Exception as e:
+        async def error_stream():
+            yield sse_message("error", {"message": f"YouTube service error: {str(e)}"})
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    # Determine which videos to process
+    if video_ids:
+        ids = [id.strip() for id in video_ids.split(",")]
+        videos_data = []
+        for vid in ids:
+            video = db.query(Video).filter(Video.id == vid).first()
+            if video:
+                transcript = (
+                    db.query(Transcript)
+                    .filter(Transcript.video_id == vid)
+                    .filter(Transcript.source.in_(["cleaned", "whisper"]))
+                    .order_by((Transcript.source == "cleaned").desc())
+                    .first()
+                )
+                if transcript:
+                    videos_data.append({
+                        "video_id": video.id,
+                        "video_title": video.title,
+                        "transcript_content": transcript.raw_content,
+                    })
+    else:
+        # Get all candidates
+        all_videos = db.query(Video).filter(Video.sync_status == "synced").all()
+        videos_data = []
+        for video in all_videos:
+            transcript = (
+                db.query(Transcript)
+                .filter(Transcript.video_id == video.id)
+                .filter(Transcript.source.in_(["cleaned", "whisper"]))
+                .order_by((Transcript.source == "cleaned").desc())
+                .first()
+            )
+            if transcript:
+                videos_data.append({
+                    "video_id": video.id,
+                    "video_title": video.title,
+                    "transcript_content": transcript.raw_content,
+                })
+
+    async def generate():
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        total = len(videos_data)
+        completed = 0
+        skipped = 0
+        failed = 0
+        processed = 0
+
+        yield sse_message("start", {
+            "total": total,
+            "parallel": parallel,
+            "message": f"Starting YouTube upload for {total} videos with {parallel} parallel workers"
+        })
+
+        if total == 0:
+            yield sse_message("complete", {
+                "total": 0,
+                "completed": 0,
+                "skipped": 0,
+                "failed": 0,
+                "message": "No videos to upload"
+            })
+            return
+
+        # Send initial processing status
+        for vd in videos_data[:parallel]:
+            yield sse_message("progress", {
+                "current": processed + 1,
+                "total": total,
+                "video_id": vd["video_id"],
+                "title": vd["video_title"],
+                "status": "processing",
+                "message": "Uploading to YouTube...",
+                "completed": completed,
+                "skipped": skipped,
+                "failed": failed,
+            })
+
+        # Process videos in parallel
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            future_to_video = {
+                executor.submit(
+                    _process_youtube_upload,
+                    vd["video_id"],
+                    vd["video_title"],
+                    vd["transcript_content"],
+                    language,
+                ): vd
+                for vd in videos_data
+            }
+
+            for future in as_completed(future_to_video):
+                vd = future_to_video[future]
+                processed += 1
+
+                try:
+                    result = future.result()
+                    status = result.get("status", "failed")
+
+                    if status == "done":
+                        completed += 1
+                    elif status == "skipped":
+                        skipped += 1
+                    else:
+                        failed += 1
+
+                    yield sse_message("progress", {
+                        "current": processed,
+                        "total": total,
+                        "video_id": result.get("video_id", vd["video_id"]),
+                        "title": result.get("title", vd["video_title"]),
+                        "status": status,
+                        "message": result.get("message", ""),
+                        "completed": completed,
+                        "skipped": skipped,
+                        "failed": failed,
+                    })
+
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"Error uploading {vd['video_id']}: {e}")
+                    yield sse_message("progress", {
+                        "current": processed,
+                        "total": total,
+                        "video_id": vd["video_id"],
+                        "title": vd["video_title"],
+                        "status": "failed",
+                        "message": str(e)[:100],
+                        "completed": completed,
+                        "skipped": skipped,
+                        "failed": failed,
+                    })
+
+                await asyncio.sleep(0.01)
+
+        yield sse_message("complete", {
+            "total": total,
+            "completed": completed,
+            "skipped": skipped,
+            "failed": failed,
+            "message": f"Batch complete: {completed} uploaded, {skipped} skipped, {failed} failed"
         })
 
     return StreamingResponse(generate(), media_type="text/event-stream")
