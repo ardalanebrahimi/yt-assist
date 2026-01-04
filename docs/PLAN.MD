@@ -185,21 +185,79 @@ GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
 
 ---
 
-## Milestone 5 – YouTube Assistant Workflows + Experiments
+## Milestone 5 – Content Automation & AI Assistants
 
-### 5.1 Implement "New Video Wizard" Flow
+### 5.1 Content Creation Assistants
+
+#### 5.1.1 "New Video Wizard" Flow
 - Input: idea or topic
 - Output: overlap check, angle suggestion, outline, script
 
-### 5.2 Implement "Series Planner"
+#### 5.1.2 "Series Planner"
 - Input: series topic
 - Output: current episodes summary, proposed next episodes
 
-### 5.3 Implement "Clip Finder"
+#### 5.1.3 "Clip Finder" / Shorts Generator
 - Input: video ID
 - Output: suggested clip ranges with timestamps and hooks
+- Auto-generate vertical shorts with captions
+- Post directly to YouTube Shorts
 
-### 5.4 Implement Multi-Model Comparison View
+### 5.2 Social Media Automation
+
+#### 5.2.1 LinkedIn Automation
+- Generate post from video transcript (key insights, tips)
+- Create carousel posts from video chapters
+- Schedule and auto-post via LinkedIn API
+- Track engagement metrics
+
+#### 5.2.2 Instagram Automation
+- Generate reels from video clips
+- Create carousel posts with key points
+- Auto-generate captions and hashtags
+- Post via Instagram Graph API
+
+#### 5.2.3 Telegram Channel
+- Auto-post video announcements
+- Share transcripts and summaries
+- Daily/weekly content digests
+- Telegram Bot API integration
+
+### 5.3 Content Repurposing Pipeline
+
+#### 5.3.1 Video → Multi-Platform Content
+- Video → Blog post (Markdown/HTML)
+- Video → Twitter/X thread
+- Video → LinkedIn article
+- Video → Newsletter content
+
+#### 5.3.2 Shorts/Clips Pipeline
+- Auto-detect highlight moments (high engagement potential)
+- Generate vertical video with burned-in captions
+- A/B test different hooks/thumbnails
+- Batch upload to YouTube Shorts, Instagram Reels, TikTok
+
+### 5.4 AI Agents
+
+#### 5.4.1 Comment Responder Agent
+- Monitor YouTube comments
+- Draft responses in your style (using fine-tuned model)
+- Queue for approval or auto-respond
+- Handle common questions via RAG
+
+#### 5.4.2 Analytics Reporter Agent
+- Weekly performance reports
+- Identify trending topics in your niche
+- Suggest content gaps and opportunities
+- Compare your content vs competitors
+
+#### 5.4.3 Content Scheduler Agent
+- Optimal posting time recommendations
+- Cross-platform scheduling
+- Content calendar management
+- Reminder notifications
+
+### 5.5 Multi-Model Comparison View
 - Side-by-side outputs from:
   - Your style model (+ RAG)
   - Base OpenAI
@@ -234,8 +292,14 @@ GET  /batch/cleanup/run?video_ids=...  # Run cleanup with SSE progress
 
 ## Next Steps
 
-**Next:** Milestone 3 (Style/Tone Modeling) or Milestone 5 (YouTube Assistant Workflows)
+**Current:** Milestone 5 - Content Automation & AI Assistants
 
-Suggested order:
-1. **Milestone 5** - YouTube Assistant Workflows (New Video Wizard, Series Planner, Clip Finder)
-2. **Milestone 3** - Style/Tone Modeling (requires labeled training data)
+Suggested implementation order:
+1. **5.1 Content Creation Assistants** - New Video Wizard, Series Planner, Clip Finder
+2. **5.2.3 Telegram Channel** - Easiest social platform to start (Bot API is simple)
+3. **5.2.1 LinkedIn Automation** - High value for professional content
+4. **5.3 Content Repurposing** - Video → Blog/Thread/Article
+5. **5.4 AI Agents** - Comment responder, Analytics reporter
+6. **5.2.2 Instagram** - More complex (requires Meta Business account)
+
+**Later:** Milestone 3 (Style/Tone Modeling) - requires labeled training data from using the system
