@@ -40,6 +40,7 @@ class VideoResponse(BaseModel):
     thumbnail_url: Optional[str]
     channel_id: str
     view_count: Optional[int]
+    live_broadcast_content: Optional[str] = None  # "live", "upcoming", "none"
     sync_status: str
     sync_error: Optional[str]
     synced_at: Optional[datetime]
@@ -73,6 +74,7 @@ def list_videos(
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None, description="Filter by sync status"),
     search: Optional[str] = Query(None, description="Search in title"),
+    live_status: Optional[str] = Query(None, description="Filter by live status: live, upcoming, none"),
 ):
     """List all videos with pagination and filters."""
     query = db.query(Video)
@@ -82,6 +84,8 @@ def list_videos(
         query = query.filter(Video.sync_status == status)
     if search:
         query = query.filter(Video.title.ilike(f"%{search}%"))
+    if live_status:
+        query = query.filter(Video.live_broadcast_content == live_status)
 
     # Get total count
     total = query.count()

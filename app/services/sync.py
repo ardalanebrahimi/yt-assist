@@ -135,6 +135,7 @@ class SyncService:
             video.thumbnail_url = metadata.thumbnail_url
             video.channel_id = metadata.channel_id
             video.view_count = metadata.view_count
+            video.live_broadcast_content = metadata.live_broadcast_content
             video.updated_at = datetime.utcnow()
 
             # Fetch transcript

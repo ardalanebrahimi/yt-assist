@@ -26,6 +26,7 @@ class VideoMetadata:
     thumbnail_url: str
     channel_id: str
     view_count: Optional[int] = None
+    live_broadcast_content: Optional[str] = None  # "live", "upcoming", or "none"
 
 
 class YouTubeService:
@@ -39,18 +40,21 @@ class YouTubeService:
             raise ValueError("YouTube API key is required. Set YOUTUBE_API_KEY in .env")
         self._youtube = build("youtube", "v3", developerKey=self.api_key)
 
-    def get_channel_videos(self, channel_id: str) -> list[VideoMetadata]:
+    def get_channel_videos(
+        self, channel_id: str, include_live: bool = True
+    ) -> list[VideoMetadata]:
         """
         Fetch all videos from a YouTube channel.
 
         Args:
             channel_id: YouTube channel ID (e.g., UCmHxUdpnCfQTQtwbxN9mtOA)
+            include_live: Whether to include live/upcoming broadcasts
 
         Returns:
             List of VideoMetadata objects
         """
         videos: list[VideoMetadata] = []
-        video_ids: list[str] = []
+        video_ids: set[str] = set()
 
         # Step 1: Get uploads playlist ID from channel
         uploads_playlist_id = self._get_uploads_playlist_id(channel_id)
@@ -71,21 +75,57 @@ class YouTubeService:
 
             for item in response.get("items", []):
                 video_id = item["contentDetails"]["videoId"]
-                video_ids.append(video_id)
+                video_ids.add(video_id)
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
                 break
 
-        logger.info(f"Found {len(video_ids)} videos in channel {channel_id}")
+        logger.info(f"Found {len(video_ids)} videos in uploads playlist")
+
+        # Step 2b: Also fetch live/upcoming broadcasts (not in uploads playlist)
+        if include_live:
+            live_ids = self._get_live_broadcast_ids(channel_id)
+            if live_ids:
+                logger.info(f"Found {len(live_ids)} live/upcoming broadcasts")
+                video_ids.update(live_ids)
+
+        logger.info(f"Total {len(video_ids)} videos for channel {channel_id}")
 
         # Step 3: Fetch full video details in batches of 50
-        for i in range(0, len(video_ids), 50):
-            batch_ids = video_ids[i : i + 50]
+        video_ids_list = list(video_ids)
+        for i in range(0, len(video_ids_list), 50):
+            batch_ids = video_ids_list[i : i + 50]
             batch_videos = self._get_videos_details(batch_ids, channel_id)
             videos.extend(batch_videos)
 
         return videos
+
+    def _get_live_broadcast_ids(self, channel_id: str) -> list[str]:
+        """Fetch live and upcoming broadcast video IDs for a channel."""
+        video_ids = []
+
+        # Search for live and upcoming broadcasts
+        for event_type in ["live", "upcoming"]:
+            try:
+                request = self._youtube.search().list(
+                    part="id",
+                    channelId=channel_id,
+                    eventType=event_type,
+                    type="video",
+                    maxResults=50,
+                )
+                response = request.execute()
+
+                for item in response.get("items", []):
+                    video_id = item["id"].get("videoId")
+                    if video_id:
+                        video_ids.append(video_id)
+
+            except HttpError as e:
+                logger.warning(f"Error fetching {event_type} broadcasts: {e}")
+
+        return video_ids
 
     def get_video(self, video_id: str) -> Optional[VideoMetadata]:
         """
@@ -184,6 +224,7 @@ class YouTubeService:
                 thumbnail_url=thumbnail_url,
                 channel_id=snippet.get("channelId", default_channel_id),
                 view_count=view_count,
+                live_broadcast_content=snippet.get("liveBroadcastContent"),
             )
         except Exception as e:
             logger.error(f"Error parsing video {item.get('id')}: {e}")

@@ -32,6 +32,7 @@ class Video(Base):
     thumbnail_url = Column(String(500), nullable=True)
     channel_id = Column(String(50), nullable=False)
     view_count = Column(Integer, nullable=True)
+    live_broadcast_content = Column(String(20), nullable=True)  # "live", "upcoming", "none"
 
     # Sync tracking
     sync_status = Column(String(20), default="pending")  # pending, synced, error
